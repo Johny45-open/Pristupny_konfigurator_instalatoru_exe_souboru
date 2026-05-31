@@ -1,9 +1,27 @@
 from PyQt6.QtWidgets import (QWizardPage, QVBoxLayout, QLabel, QLineEdit, QFileDialog, 
                              QPushButton, QHBoxLayout, QComboBox, QMessageBox, QProgressDialog, QApplication)
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QThread, pyqtSignal
 import os
 from generator.iss_generator import generate_iss
 from generator.exe_builder import build_installer
+
+class BuildThread(QThread):
+    finished_signal = pyqtSignal(bool, str)
+
+    def __init__(self, data, output_path):
+        super().__init__()
+        self.data = data
+        self.output_path = output_path
+
+    def run(self):
+        try:
+            success = build_installer(self.data, self.output_path)
+            if success:
+                self.finished_signal.emit(True, "Instalátor byl úspěšně vytvořen.")
+            else:
+                self.finished_signal.emit(False, "Sestavení skončilo bez chyby, ale soubor nebyl nalezen.")
+        except Exception as e:
+            self.finished_signal.emit(False, str(e))
 
 class IntroPage(QWizardPage):
     def __init__(self, parent=None):
@@ -160,24 +178,23 @@ class FinishPage(QWizardPage):
         data = self.get_data()
         file_path, _ = QFileDialog.getSaveFileName(self, "Uložit EXE instalátor", f"{data['appName']}_Setup.exe", "Spustitelný soubor (*.exe)")
         if file_path:
-            progress = QProgressDialog("Sestavuji instalátor, prosím čekejte...", None, 0, 0, self)
-            progress.setWindowTitle("Pracuji...")
-            progress.setWindowModality(Qt.WindowModality.WindowModal)
-            progress.setAccessibleName("Probíhá sestavování instalátoru, prosím čekejte. Tato operace může trvat až minutu.")
-            progress.show()
+            self.progress = QProgressDialog("Sestavuji instalátor, prosím čekejte...", None, 0, 0, self)
+            self.progress.setWindowTitle("Pracuji...")
+            self.progress.setWindowModality(Qt.WindowModality.WindowModal)
+            self.progress.setAccessibleName("Probíhá sestavování instalátoru, prosím čekejte. Tato operace může trvat až minutu.")
+            self.progress.show()
             
-            QApplication.processEvents()
-            
-            try:
-                if build_installer(data, file_path):
-                    progress.close()
-                    QMessageBox.information(self, "Úspěch", f"Instalátor byl úspěšně vytvořen:\n{file_path}")
-                else:
-                    progress.close()
-                    QMessageBox.warning(self, "Varování", "Sestavení skončilo bez chyby, ale soubor nebyl nalezen.")
-            except Exception as e:
-                progress.close()
-                QMessageBox.critical(self, "Chyba při sestavování", str(e))
+            # Použijeme vlákno, aby GUI nezamrzlo
+            self.build_thread = BuildThread(data, file_path)
+            self.build_thread.finished_signal.connect(self.on_build_finished)
+            self.build_thread.start()
+
+    def on_build_finished(self, success, message):
+        self.progress.close()
+        if success:
+            QMessageBox.information(self, "Úspěch", f"{message}\nCesta: {self.build_thread.output_path}")
+        else:
+            QMessageBox.critical(self, "Chyba při sestavování", message)
 
     def validatePage(self):
         return True
