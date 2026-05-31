@@ -9,7 +9,7 @@ from PyQt6.QtCore import Qt, QThread, pyqtSignal
 
 # Moderní Tmavý Režim (Dark Mode) pro instalátor
 DARK_STYLESHEET = """
-QWizard, QWizardPage {
+QWizard, QWizardPage, QDialog {
     background-color: #000000;
     color: #ffffff;
 }
@@ -88,32 +88,29 @@ class InstallationThread(QThread):
 class IntroPage(QWizardPage):
     def __init__(self, config):
         super().__init__()
-        self.setTitle(f"Instalace programu {config['appName']}")
+        self.setTitle("Vítejte")
+        text = f"Vítá vás instalace programu {config['appName']}. Pokračujte stisknutím tlačítka Další."
+        self.setAccessibleName(text)
+        
         layout = QVBoxLayout()
-        text = f"Vítá vás instalace programu {config['appName']} verze {config['appVersion']}.\n\n" \
-               f"Tento instalátor je navržen s ohledem na maximální přístupnost.\n" \
-               f"Pokračujte stisknutím tlačítka Další."
         label = QLabel(text)
         label.setWordWrap(True)
-        label.setAccessibleName(text)
         layout.addWidget(label)
         self.setLayout(layout)
 
 class DirectoryPage(QWizardPage):
     def __init__(self, config):
         super().__init__()
-        self.setTitle("Zvolte cílové umístění")
-        layout = QVBoxLayout()
+        self.setTitle("Cílové umístění")
+        text = f"Kam má být produkt {config['appName']} nainstalován?"
+        self.setAccessibleName(f"Stránka Cílové umístění. {text}")
         
-        desc = f"Kam má být produkt {config['appName']} nainstalován?"
-        label = QLabel(desc)
-        label.setAccessibleName(desc)
+        layout = QVBoxLayout()
+        label = QLabel(text)
         layout.addWidget(label)
 
         self.pathEdit = QLineEdit()
         
-        # Logika pro výběr Program Files na základě konfigurace
-        # 0 = 64-bit, 1 = 32-bit
         if config.get('installDir', 0) == 0:
             pf = os.environ.get("ProgramW6432") or os.environ.get("ProgramFiles")
         else:
@@ -132,17 +129,16 @@ class ProgressPage(QWizardPage):
         super().__init__()
         self.config = config
         self.source_dir = source_dir
-        self.setTitle("Průběh instalace")
-        layout = QVBoxLayout()
+        self.setTitle("Průběh")
+        self.setAccessibleName("Probíhá instalace, prosím čekejte.")
         
-        self.statusLabel = QLabel("Připraveno k instalaci...")
-        self.statusLabel.setAccessibleName("Stav instalace: Připraveno")
+        layout = QVBoxLayout()
+        self.statusLabel = QLabel("Připraveno...")
         layout.addWidget(self.statusLabel)
         
         self.progressBar = QProgressBar()
-        self.progressBar.setAccessibleName("Progress bar průběhu instalace")
+        self.progressBar.setAccessibleName("Průběh v procentech")
         layout.addWidget(self.progressBar)
-        
         self.setLayout(layout)
 
     def initializePage(self):
@@ -156,35 +152,36 @@ class ProgressPage(QWizardPage):
 
     def update_status(self, text):
         self.statusLabel.setText(text)
-        self.statusLabel.setAccessibleName(f"Aktuálně: {text}")
+        self.statusLabel.setAccessibleName(f"Stav: {text}")
 
     def on_finished(self, success, message):
         if success:
             self.wizard().next()
         else:
-            QMessageBox.critical(self, "Chyba", f"Instalace selhala: {message}")
+            QMessageBox.critical(self, "Chyba", f"Selhalo: {message}")
 
 class FinishPage(QWizardPage):
     def __init__(self, config):
         super().__init__()
-        self.setTitle("Instalace dokončena")
+        self.setTitle("Dokončeno")
+        text = f"Program {config['appName']} byl úspěšně nainstalován. Nyní můžete okno zavřít tlačítkem Dokončit."
+        self.setAccessibleName(text)
+        
         layout = QVBoxLayout()
-        text = f"Program {config['appName']} byl úspěšně nainstalován.\n" \
-               f"Nyní můžete okno zavřít tlačítkem Dokončit."
         label = QLabel(text)
         label.setWordWrap(True)
-        label.setAccessibleName(text)
         layout.addWidget(label)
         self.setLayout(layout)
 
-class InstallerWizard(QWizard):
+class AccessibleWizard(QWizard):
     def __init__(self, config, source_dir):
         super().__init__()
         self.config = config
         self.setWindowTitle(f"Instalace - {config['appName']}")
         self.setStyleSheet(DARK_STYLESHEET)
+        self.setWizardStyle(QWizard.WizardStyle.ModernStyle)
         
-        # Ruční lokalizace tlačítek
+        # Vynucení češtiny
         self.setButtonText(QWizard.WizardButton.NextButton, "Další >")
         self.setButtonText(QWizard.WizardButton.BackButton, "< Zpět")
         self.setButtonText(QWizard.WizardButton.CancelButton, "Zrušit")
@@ -194,40 +191,34 @@ class InstallerWizard(QWizard):
         self.addPage(DirectoryPage(config))
         self.addPage(ProgressPage(config, source_dir))
         self.addPage(FinishPage(config))
-        self.setWizardStyle(QWizard.WizardStyle.ModernStyle)
 
     def reject(self):
-        # Vlastní dialog pro zrušení instalace (přístupný)
         msg = f"Chcete skutečně přerušit instalaci programu {self.config['appName']}?\n\n" \
-              f"Pokud ji nyní ukončíte, program nebude nainstalován. Stiskněte Ano pro ukončení nebo Ne pro pokračování."
-        
-        # MessageBox v PyQt6 je v Dark Mode díky naší aplikaci automaticky tmavý
-        reply = QMessageBox.question(self, "Ukončení instalace", msg, 
+              f"Stiskněte Ano pro ukončení nebo Ne pro pokračování."
+        reply = QMessageBox.question(self, "Ukončení", msg, 
                                      QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, 
                                      QMessageBox.StandardButton.No)
-        
         if reply == QMessageBox.StandardButton.Yes:
             super().reject()
 
 def main():
     base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
-    
     config_path = os.path.join(base_path, "config.json")
     if not os.path.exists(config_path):
-        config = {"appName": "Test App", "appVersion": "1.0", "appAuthor": "Test", "installDir": 0}
+        config = {"appName": "Aplikace", "appVersion": "1.0", "appAuthor": "Autor", "installDir": 0}
     else:
         with open(config_path, "r", encoding="utf-8") as f:
             config = json.load(f)
 
     app = QApplication(sys.argv)
-    
     source_dir = os.path.join(base_path, "payload")
     if not os.path.exists(source_dir):
         os.makedirs(source_dir)
 
-    wizard = InstallerWizard(config, source_dir)
+    wizard = AccessibleWizard(config, source_dir)
     wizard.show()
     sys.exit(app.exec())
 
 if __name__ == "__main__":
     main()
+Applied fuzzy match at line 146-163.
