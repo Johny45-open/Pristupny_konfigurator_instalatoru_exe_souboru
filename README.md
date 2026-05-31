@@ -1,6 +1,3 @@
-
-lang = "cs"
-
 # Přístupný konfigurátor instalátorů (.EXE)
 
 Tento nástroj slouží k vytváření instalátorů pomocí Inno Setup nebo pomocí vlastního nativního řešení v PyQt6 s důrazem na maximální přístupnost pro uživatele čteček obrazovky (NVDA, JAWS).
