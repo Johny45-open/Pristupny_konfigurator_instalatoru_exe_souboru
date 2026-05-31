@@ -1,17 +1,19 @@
-from PyQt6.QtWidgets import QWizardPage, QVBoxLayout, QLabel, QLineEdit, QFileDialog, QPushButton, QHBoxLayout, QComboBox, QMessageBox
+from PyQt6.QtWidgets import (QWizardPage, QVBoxLayout, QLabel, QLineEdit, QFileDialog, 
+                             QPushButton, QHBoxLayout, QComboBox, QMessageBox, QProgressDialog, QApplication)
 from PyQt6.QtCore import Qt
 import os
 from generator.iss_generator import generate_iss
+from generator.exe_builder import build_installer
 
 class IntroPage(QWizardPage):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setTitle("Vítejte v přístupném konfigurátoru")
         layout = QVBoxLayout()
-        label = QLabel("Tento průvodce vám pomůže vytvořit přístupný instalátor pro vaši aplikaci pomocí Inno Setup.")
+        label = QLabel("Tento průvodce vám pomůže vytvořit přístupný instalátor pro vaši aplikaci.")
         label.setWordWrap(True)
         # Nastavení přístupného jména pro čtečky
-        label.setAccessibleName("Úvodní text: Tento průvodce vám pomůže vytvořit přístupný instalátor pro vaši aplikaci pomocí Inno Setup.")
+        label.setAccessibleName("Úvodní text: Tento průvodce vám pomůže vytvořit přístupný instalátor pro vaši aplikaci.")
         layout.addWidget(label)
         self.setLayout(layout)
 
@@ -116,21 +118,25 @@ class FinishPage(QWizardPage):
         super().__init__(parent)
         self.setTitle("Dokončení")
         layout = QVBoxLayout()
-        self.label = QLabel("Vše je připraveno ke generování Inno Setup skriptu. Kliknutím na Dokončit vyberete místo uložení.")
+        self.label = QLabel("Nyní si můžete vybrat, zda chcete vygenerovat pouze Inno Setup skript, nebo přímo vytvořit hotový EXE instalátor.")
         self.label.setWordWrap(True)
         self.label.setAccessibleName(self.label.text())
         layout.addWidget(self.label)
+
+        self.btnIss = QPushButton("Generovat .iss skript")
+        self.btnIss.setAccessibleName("Tlačítko pro generování Inno Setup skriptu")
+        self.btnIss.clicked.connect(self.handle_iss)
+        layout.addWidget(self.btnIss)
+
+        self.btnExe = QPushButton("Vytvořit přímo EXE instalátor")
+        self.btnExe.setAccessibleName("Tlačítko pro přímé vytvoření hotového EXE instalátoru. Pozor, sestavování může trvat až minutu.")
+        self.btnExe.clicked.connect(self.handle_exe)
+        layout.addWidget(self.btnExe)
+
         self.setLayout(layout)
 
-    def validatePage(self):
-        # Tato metoda se zavolá při pokusu o dokončení wizardu
-        app_name = self.field("appName")
-        file_path, _ = QFileDialog.getSaveFileName(self, "Uložit Inno Setup skript", f"{app_name}.iss", "Inno Setup Script (*.iss)")
-        
-        if not file_path:
-            return False
-
-        data = {
+    def get_data(self):
+        return {
             "appName": self.field("appName"),
             "appVersion": self.field("appVersion"),
             "appAuthor": self.field("appAuthor"),
@@ -139,12 +145,39 @@ class FinishPage(QWizardPage):
             "installDir": self.field("installDir")
         }
 
-        template_path = os.path.join(os.path.dirname(__file__), "..", "..", "templates", "base_template.iss")
-        
-        try:
-            generate_iss(data, file_path, template_path)
-            QMessageBox.information(self, "Úspěch", f"Skript byl úspěšně vygenerován do:\n{file_path}")
-            return True
-        except Exception as e:
-            QMessageBox.critical(self, "Chyba", f"Při generování skriptu došlo k chybě:\n{str(e)}")
-            return False
+    def handle_iss(self):
+        data = self.get_data()
+        file_path, _ = QFileDialog.getSaveFileName(self, "Uložit Inno Setup skript", f"{data['appName']}.iss", "Inno Setup Script (*.iss)")
+        if file_path:
+            template_path = os.path.join(os.path.dirname(__file__), "..", "..", "templates", "base_template.iss")
+            try:
+                generate_iss(data, file_path, template_path)
+                QMessageBox.information(self, "Úspěch", f"Skript byl úspěšně vygenerován do:\n{file_path}")
+            except Exception as e:
+                QMessageBox.critical(self, "Chyba", str(e))
+
+    def handle_exe(self):
+        data = self.get_data()
+        file_path, _ = QFileDialog.getSaveFileName(self, "Uložit EXE instalátor", f"{data['appName']}_Setup.exe", "Spustitelný soubor (*.exe)")
+        if file_path:
+            progress = QProgressDialog("Sestavuji instalátor, prosím čekejte...", None, 0, 0, self)
+            progress.setWindowTitle("Pracuji...")
+            progress.setWindowModality(Qt.WindowModality.WindowModal)
+            progress.setAccessibleName("Probíhá sestavování instalátoru, prosím čekejte. Tato operace může trvat až minutu.")
+            progress.show()
+            
+            QApplication.processEvents()
+            
+            try:
+                if build_installer(data, file_path):
+                    progress.close()
+                    QMessageBox.information(self, "Úspěch", f"Instalátor byl úspěšně vytvořen:\n{file_path}")
+                else:
+                    progress.close()
+                    QMessageBox.warning(self, "Varování", "Sestavení skončilo bez chyby, ale soubor nebyl nalezen.")
+            except Exception as e:
+                progress.close()
+                QMessageBox.critical(self, "Chyba při sestavování", str(e))
+
+    def validatePage(self):
+        return True
