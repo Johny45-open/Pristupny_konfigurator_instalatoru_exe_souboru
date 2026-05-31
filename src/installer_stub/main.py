@@ -7,7 +7,41 @@ from PyQt6.QtWidgets import (QApplication, QWizard, QWizardPage, QVBoxLayout,
                              QProgressBar, QMessageBox)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 
-# Tento soubor bude sloužit jako "mozek" instalátoru, který se spustí u koncového uživatele.
+# Moderní a přístupný styl (QSS)
+STYLESHEET = """
+QWizard {
+    background-color: #f5f5f5;
+}
+QWizardPage {
+    background-color: #f5f5f5;
+}
+QLabel {
+    color: #333333;
+    font-size: 14px;
+}
+QLineEdit {
+    padding: 8px;
+    border: 1px solid #cccccc;
+    border-radius: 4px;
+    background-color: white;
+    color: black;
+}
+QProgressBar {
+    border: 1px solid #cccccc;
+    border-radius: 4px;
+    text-align: center;
+    background-color: white;
+}
+QProgressBar::chunk {
+    background-color: #0078d7;
+}
+QPushButton {
+    padding: 8px 16px;
+    background-color: #e1e1e1;
+    border: 1px solid #adadad;
+    border-radius: 4px;
+}
+"""
 
 class InstallationThread(QThread):
     progress = pyqtSignal(int)
@@ -25,15 +59,20 @@ class InstallationThread(QThread):
             if not os.path.exists(self.dest_dir):
                 os.makedirs(self.dest_dir)
             
-            # Simulace kopírování souborů (v reálném EXE budou data v dočasné složce)
             files = os.listdir(self.source_dir)
             total = len(files)
             
+            if total == 0:
+                self.finished_signal.emit(True, "Instalace byla úspěšně dokončena.")
+                return
+
             for i, f in enumerate(files):
                 src = os.path.join(self.source_dir, f)
                 dst = os.path.join(self.dest_dir, f)
                 if os.path.isdir(src):
-                    shutil.copytree(src, dst, dirs_exist_ok=True)
+                    if os.path.exists(dst):
+                        shutil.rmtree(dst)
+                    shutil.copytree(src, dst)
                 else:
                     shutil.copy2(src, dst)
                 
@@ -124,6 +163,7 @@ class FinishPage(QWizardPage):
         text = f"Program {config['appName']} byl úspěšně nainstalován.\n" \
                f"Nyní můžete okno zavřít tlačítkem Dokončit."
         label = QLabel(text)
+        label.setWordWrap(True)
         label.setAccessibleName(text)
         layout.addWidget(label)
         self.setLayout(layout)
@@ -132,17 +172,19 @@ class InstallerWizard(QWizard):
     def __init__(self, config, source_dir):
         super().__init__()
         self.setWindowTitle(f"Instalace - {config['appName']}")
+        self.setStyleSheet(STYLESHEET)
         self.addPage(IntroPage(config))
         self.addPage(DirectoryPage(config))
         self.addPage(ProgressPage(config, source_dir))
         self.addPage(FinishPage(config))
-        self.setWizardStyle(QWizard.WizardStyle.ClassicStyle) # Klasický styl je pro čtečky nejlepší
+        self.setWizardStyle(QWizard.WizardStyle.ModernStyle)
 
 def main():
-    # Načtení konfigurace (při sestavení bude buď v souboru nebo vložená)
-    config_path = os.path.join(os.path.dirname(__file__), "config.json")
+    # Zjištění cesty k dočasné složce (pokud běžíme z PyInstalleru)
+    base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
+    
+    config_path = os.path.join(base_path, "config.json")
     if not os.path.exists(config_path):
-        # Fallback pro testování
         config = {"appName": "Test App", "appVersion": "1.0", "appAuthor": "Test"}
     else:
         with open(config_path, "r", encoding="utf-8") as f:
@@ -150,10 +192,9 @@ def main():
 
     app = QApplication(sys.argv)
     
-    # Složka se soubory k instalaci (v EXE bude v _MEIPASS)
-    source_dir = os.path.join(os.path.dirname(__file__), "payload")
+    source_dir = os.path.join(base_path, "payload")
     if not os.path.exists(source_dir):
-        os.makedirs(source_dir) # Jen pro testování
+        os.makedirs(source_dir)
 
     wizard = InstallerWizard(config, source_dir)
     wizard.show()
