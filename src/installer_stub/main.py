@@ -10,39 +10,37 @@ from PyQt6.QtCore import Qt, QThread, pyqtSignal
 # Moderní Tmavý Režim (Dark Mode) pro instalátor
 DARK_STYLESHEET = """
 QWizard, QWizardPage {
-    background-color: #121212;
+    background-color: #000000;
     color: #ffffff;
 }
 QLabel {
     color: #ffffff;
-    font-size: 14px;
+    font-size: 15px;
 }
 QLineEdit {
-    padding: 8px;
-    border: 1px solid #3d3d3d;
+    padding: 10px;
+    border: 2px solid #ffffff;
     border-radius: 4px;
-    background-color: #1e1e1e;
+    background-color: #121212;
     color: #ffffff;
 }
 QProgressBar {
-    border: 1px solid #3d3d3d;
+    border: 2px solid #ffffff;
     border-radius: 4px;
     text-align: center;
-    background-color: #1e1e1e;
+    background-color: #121212;
     color: #ffffff;
 }
 QProgressBar::chunk {
     background-color: #0078d7;
 }
 QPushButton {
-    padding: 8px 16px;
-    background-color: #333333;
-    border: 1px solid #555555;
+    padding: 10px 20px;
+    background-color: #222222;
+    border: 2px solid #ffffff;
     border-radius: 4px;
     color: #ffffff;
-}
-QPushButton:hover {
-    background-color: #444444;
+    font-weight: bold;
 }
 """
 
@@ -113,7 +111,15 @@ class DirectoryPage(QWizardPage):
         layout.addWidget(label)
 
         self.pathEdit = QLineEdit()
-        default_path = os.path.join(os.environ.get("ProgramFiles", "C:\\Program Files"), config['appName'])
+        
+        # Logika pro výběr Program Files na základě konfigurace
+        # 0 = 64-bit, 1 = 32-bit
+        if config.get('installDir', 0) == 0:
+            pf = os.environ.get("ProgramW6432") or os.environ.get("ProgramFiles")
+        else:
+            pf = os.environ.get("ProgramFiles(x86)") or os.environ.get("ProgramFiles")
+            
+        default_path = os.path.join(pf, config['appName'])
         self.pathEdit.setText(default_path)
         self.pathEdit.setAccessibleName("Cesta k instalaci")
         layout.addWidget(self.pathEdit)
@@ -174,20 +180,41 @@ class FinishPage(QWizardPage):
 class InstallerWizard(QWizard):
     def __init__(self, config, source_dir):
         super().__init__()
+        self.config = config
         self.setWindowTitle(f"Instalace - {config['appName']}")
         self.setStyleSheet(DARK_STYLESHEET)
+        
+        # Ruční lokalizace tlačítek
+        self.setButtonText(QWizard.WizardButton.NextButton, "Další >")
+        self.setButtonText(QWizard.WizardButton.BackButton, "< Zpět")
+        self.setButtonText(QWizard.WizardButton.CancelButton, "Zrušit")
+        self.setButtonText(QWizard.WizardButton.FinishButton, "Dokončit")
+
         self.addPage(IntroPage(config))
         self.addPage(DirectoryPage(config))
         self.addPage(ProgressPage(config, source_dir))
         self.addPage(FinishPage(config))
-        self.setWizardStyle(QWizard.WizardStyle.ClassicStyle)
+        self.setWizardStyle(QWizard.WizardStyle.ModernStyle)
+
+    def reject(self):
+        # Vlastní dialog pro zrušení instalace (přístupný)
+        msg = f"Chcete skutečně přerušit instalaci programu {self.config['appName']}?\n\n" \
+              f"Pokud ji nyní ukončíte, program nebude nainstalován. Stiskněte Ano pro ukončení nebo Ne pro pokračování."
+        
+        # MessageBox v PyQt6 je v Dark Mode díky naší aplikaci automaticky tmavý
+        reply = QMessageBox.question(self, "Ukončení instalace", msg, 
+                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, 
+                                     QMessageBox.StandardButton.No)
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            super().reject()
 
 def main():
     base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
     
     config_path = os.path.join(base_path, "config.json")
     if not os.path.exists(config_path):
-        config = {"appName": "Test App", "appVersion": "1.0", "appAuthor": "Test"}
+        config = {"appName": "Test App", "appVersion": "1.0", "appAuthor": "Test", "installDir": 0}
     else:
         with open(config_path, "r", encoding="utf-8") as f:
             config = json.load(f)

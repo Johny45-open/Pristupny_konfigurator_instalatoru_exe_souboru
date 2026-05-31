@@ -4,65 +4,60 @@ from ui.wizard_pages import IntroPage, AppInfoPage, FileSelectionPage, Installat
 
 # Moderní Tmavý Režim (Dark Mode) pro vysokou přístupnost a kontrast
 DARK_STYLESHEET = """
-QWizard, QWizardPage {
-    background-color: #121212;
+QWizard, QWizardPage, QDialog {
+    background-color: #000000;
     color: #ffffff;
 }
 QLabel {
     color: #ffffff;
-    font-size: 14px;
+    font-size: 15px;
+    background-color: transparent;
 }
 QLineEdit {
-    padding: 8px;
-    border: 1px solid #3d3d3d;
+    padding: 10px;
+    border: 2px solid #ffffff;
     border-radius: 4px;
-    background-color: #1e1e1e;
+    background-color: #121212;
     color: #ffffff;
-    selection-background-color: #0078d7;
-}
-QLineEdit:focus {
-    border: 2px solid #0078d7;
 }
 QPushButton {
-    padding: 8px 16px;
-    background-color: #333333;
-    border: 1px solid #555555;
+    padding: 10px 20px;
+    background-color: #222222;
+    border: 2px solid #ffffff;
     border-radius: 4px;
-    min-width: 80px;
     color: #ffffff;
+    font-weight: bold;
 }
 QPushButton:hover {
-    background-color: #444444;
+    background-color: #333333;
     border-color: #0078d7;
 }
-QPushButton:pressed {
-    background-color: #222222;
-}
 QComboBox {
-    padding: 5px;
-    border: 1px solid #3d3d3d;
-    background-color: #1e1e1e;
+    padding: 8px;
+    border: 2px solid #ffffff;
+    background-color: #121212;
     color: #ffffff;
-}
-QComboBox QAbstractItemView {
-    background-color: #1e1e1e;
-    color: #ffffff;
-    selection-background-color: #0078d7;
 }
 """
+
+class AccessibleWizard(QWizard):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Přístupný konfigurátor instalátorů - Wizard")
+        self.setStyleSheet(DARK_STYLESHEET)
+        self.setWizardStyle(QWizard.WizardStyle.ModernStyle)
+        
+        # Vynucení české lokalizace tlačítek
+        self.setButtonText(QWizard.WizardButton.NextButton, "Další >")
+        self.setButtonText(QWizard.WizardButton.BackButton, "< Zpět")
+        self.setButtonText(QWizard.WizardButton.CancelButton, "Zrušit")
+        self.setButtonText(QWizard.WizardButton.FinishButton, "Dokončit")
 
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName("Přístupný konfigurátor instalátorů")
     
-    # Nastavení palety pro tmavý režim (aby i systémové prvky byly tmavé)
-    app.setStyleSheet(DARK_STYLESHEET)
-    
-    wizard = QWizard()
-    wizard.setWindowTitle("Přístupný konfigurátor instalátorů - Wizard")
-    
-    # Použijeme ClassicStyle, který je v tmavém režimu často přehlednější pro čtečky
-    wizard.setWizardStyle(QWizard.WizardStyle.ClassicStyle)
+    wizard = AccessibleWizard()
     
     # Přidání stránek wizardu
     wizard.addPage(IntroPage())
@@ -71,7 +66,7 @@ def main():
     wizard.addPage(InstallationSettingsPage())
     wizard.addPage(FinishPage())
     
-    wizard.resize(700, 500)
+    wizard.resize(750, 550)
     wizard.show()
     
     sys.exit(app.exec())
