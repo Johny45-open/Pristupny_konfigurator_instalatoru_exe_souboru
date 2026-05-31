@@ -2,24 +2,22 @@ import sys
 from PyQt6.QtWidgets import QApplication, QWizard
 from ui.wizard_pages import IntroPage, AppInfoPage, FileSelectionPage, InstallationSettingsPage, FinishPage
 
-# Moderní a přístupný styl (QSS)
-STYLESHEET = """
-QWizard {
-    background-color: #f5f5f5;
-}
-QWizardPage {
-    background-color: #f5f5f5;
+# Moderní Tmavý Režim (Dark Mode) pro vysokou přístupnost a kontrast
+DARK_STYLESHEET = """
+QWizard, QWizardPage {
+    background-color: #121212;
+    color: #ffffff;
 }
 QLabel {
-    color: #333333;
+    color: #ffffff;
     font-size: 14px;
 }
 QLineEdit {
     padding: 8px;
-    border: 1px solid #cccccc;
+    border: 1px solid #3d3d3d;
     border-radius: 4px;
-    background-color: white;
-    color: black;
+    background-color: #1e1e1e;
+    color: #ffffff;
     selection-background-color: #0078d7;
 }
 QLineEdit:focus {
@@ -27,37 +25,44 @@ QLineEdit:focus {
 }
 QPushButton {
     padding: 8px 16px;
-    background-color: #e1e1e1;
-    border: 1px solid #adadad;
+    background-color: #333333;
+    border: 1px solid #555555;
     border-radius: 4px;
     min-width: 80px;
-    color: black;
+    color: #ffffff;
 }
 QPushButton:hover {
-    background-color: #e5f1fb;
+    background-color: #444444;
     border-color: #0078d7;
 }
 QPushButton:pressed {
-    background-color: #cce4f7;
+    background-color: #222222;
 }
 QComboBox {
     padding: 5px;
-    border: 1px solid #cccccc;
-    background-color: white;
-    color: black;
+    border: 1px solid #3d3d3d;
+    background-color: #1e1e1e;
+    color: #ffffff;
+}
+QComboBox QAbstractItemView {
+    background-color: #1e1e1e;
+    color: #ffffff;
+    selection-background-color: #0078d7;
 }
 """
 
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName("Přístupný konfigurátor instalátorů")
-    app.setStyleSheet(STYLESHEET)
+    
+    # Nastavení palety pro tmavý režim (aby i systémové prvky byly tmavé)
+    app.setStyleSheet(DARK_STYLESHEET)
     
     wizard = QWizard()
     wizard.setWindowTitle("Přístupný konfigurátor instalátorů - Wizard")
     
-    # Nastavení moderního stylu wizardu
-    wizard.setWizardStyle(QWizard.WizardStyle.ModernStyle)
+    # Použijeme ClassicStyle, který je v tmavém režimu často přehlednější pro čtečky
+    wizard.setWizardStyle(QWizard.WizardStyle.ClassicStyle)
     
     # Přidání stránek wizardu
     wizard.addPage(IntroPage())

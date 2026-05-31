@@ -7,39 +7,42 @@ from PyQt6.QtWidgets import (QApplication, QWizard, QWizardPage, QVBoxLayout,
                              QProgressBar, QMessageBox)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 
-# Moderní a přístupný styl (QSS)
-STYLESHEET = """
-QWizard {
-    background-color: #f5f5f5;
-}
-QWizardPage {
-    background-color: #f5f5f5;
+# Moderní Tmavý Režim (Dark Mode) pro instalátor
+DARK_STYLESHEET = """
+QWizard, QWizardPage {
+    background-color: #121212;
+    color: #ffffff;
 }
 QLabel {
-    color: #333333;
+    color: #ffffff;
     font-size: 14px;
 }
 QLineEdit {
     padding: 8px;
-    border: 1px solid #cccccc;
+    border: 1px solid #3d3d3d;
     border-radius: 4px;
-    background-color: white;
-    color: black;
+    background-color: #1e1e1e;
+    color: #ffffff;
 }
 QProgressBar {
-    border: 1px solid #cccccc;
+    border: 1px solid #3d3d3d;
     border-radius: 4px;
     text-align: center;
-    background-color: white;
+    background-color: #1e1e1e;
+    color: #ffffff;
 }
 QProgressBar::chunk {
     background-color: #0078d7;
 }
 QPushButton {
     padding: 8px 16px;
-    background-color: #e1e1e1;
-    border: 1px solid #adadad;
+    background-color: #333333;
+    border: 1px solid #555555;
     border-radius: 4px;
+    color: #ffffff;
+}
+QPushButton:hover {
+    background-color: #444444;
 }
 """
 
@@ -172,15 +175,14 @@ class InstallerWizard(QWizard):
     def __init__(self, config, source_dir):
         super().__init__()
         self.setWindowTitle(f"Instalace - {config['appName']}")
-        self.setStyleSheet(STYLESHEET)
+        self.setStyleSheet(DARK_STYLESHEET)
         self.addPage(IntroPage(config))
         self.addPage(DirectoryPage(config))
         self.addPage(ProgressPage(config, source_dir))
         self.addPage(FinishPage(config))
-        self.setWizardStyle(QWizard.WizardStyle.ModernStyle)
+        self.setWizardStyle(QWizard.WizardStyle.ClassicStyle)
 
 def main():
-    # Zjištění cesty k dočasné složce (pokud běžíme z PyInstalleru)
     base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
     
     config_path = os.path.join(base_path, "config.json")
