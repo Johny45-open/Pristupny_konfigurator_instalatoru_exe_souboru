@@ -88,11 +88,12 @@ class FileSelectionPage(QWizardPage):
         layout.addLayout(exeLayout)
         self.registerField("exePath*", self.exePathEdit)
 
-        self.dirDescLabel = QLabel("Složka aplikace (DŮLEŽITÉ: U --onedir vyberte složku obsahující _internal):")
+        self.dirDescLabel = QLabel("Složka se všemi soubory aplikace (DŮLEŽITÉ: U --onedir vyberte složku, kde je přímo váš EXE a složka _internal):")
         self.dirDescLabel.setWordWrap(True)
         layout.addWidget(self.dirDescLabel)
         dirLayout = QHBoxLayout()
         self.dirPathEdit = QLineEdit()
+        self.dirPathEdit.setPlaceholderText("Např. C:\\projekty\\moje_aplikace\\dist\\hlavni_program")
         self.dirPathEdit.setAccessibleName("Složka aplikace")
         self.dirBrowseBtn = QPushButton("Procházet...")
         self.dirBrowseBtn.setAccessibleName("Procházet složku")
@@ -108,6 +109,14 @@ class FileSelectionPage(QWizardPage):
         file, _ = QFileDialog.getOpenFileName(self, "Vybrat EXE soubor", "", "Spustitelné soubory (*.exe)")
         if file:
             self.exePathEdit.setText(file)
+            # Auto-detekce složky aplikace (pokud je vedle EXE složka _internal nebo lib)
+            exe_dir = os.path.dirname(os.path.abspath(file))
+            if os.path.exists(os.path.join(exe_dir, "_internal")) or os.path.exists(os.path.join(exe_dir, "lib")):
+                if not self.dirPathEdit.text():
+                    self.dirPathEdit.setText(exe_dir)
+                    QMessageBox.information(self, "Detekována složka aplikace", 
+                        "V blízkosti EXE souboru byla nalezena složka se závislostmi (_internal nebo lib). "
+                        "Automaticky jsem ji nastavil jako složku aplikace.")
 
     def browseDir(self):
         directory = QFileDialog.getExistingDirectory(self, "Vybrat složku aplikace")
@@ -174,12 +183,36 @@ class FinishPage(QWizardPage):
         if data['dirPath'] and os.path.exists(data['dirPath']):
             exe_path = os.path.abspath(data['exePath'])
             dir_path = os.path.abspath(data['dirPath'])
+            
             if not exe_path.startswith(dir_path):
-                reply = QMessageBox.warning(self, "Varování", 
+                QMessageBox.warning(self, "Chyba cesty", 
                     "Vybraný EXE soubor se nenachází ve vybrané složce aplikace. "
-                    "To pravděpodobně způsobí chybu po instalaci. Chcete přesto pokračovat?",
+                    "Opravte prosím výběr.")
+                return False
+            
+            # Kontrola, zda je EXE přímo v té složce, ne o úroveň hlouběji
+            rel_path = os.path.relpath(exe_path, dir_path)
+            if os.path.dirname(rel_path) != "":
+                reply = QMessageBox.question(self, "Varování", 
+                    "EXE soubor není přímo ve vybrané složce, ale v její podsložce. "
+                    "To obvykle vede k chybám při spouštění (nenalezení DLL). "
+                    "Chcete automaticky změnit složku aplikace na tu, kde je EXE?",
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-                return reply == QMessageBox.StandardButton.Yes
+                if reply == QMessageBox.StandardButton.Yes:
+                    self.dirPathEdit.setText(os.path.dirname(exe_path))
+                    return False # Necháme uživatele zkontrolovat změnu
+        
+        # Pokud je to onedir build (existuje _internal u EXE) a uživatel nevybral dirPath
+        exe_dir = os.path.dirname(os.path.abspath(data['exePath']))
+        if os.path.exists(os.path.join(exe_dir, "_internal")) and not data['dirPath']:
+             reply = QMessageBox.question(self, "Chybějící složka závislostí", 
+                "U vašeho EXE souboru byla nalezena složka '_internal', ale nevybrali jste 'Složku aplikace'. "
+                "Bez ní program po instalaci nebude fungovat. Chcete ji doplnit automaticky?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+             if reply == QMessageBox.StandardButton.Yes:
+                 self.dirPathEdit.setText(exe_dir)
+                 return False
+
         return True
 
     def handle_iss(self):
