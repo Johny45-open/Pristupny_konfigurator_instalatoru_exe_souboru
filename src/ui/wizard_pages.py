@@ -26,23 +26,28 @@ class BuildThread(QThread):
 class IntroPage(QWizardPage):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setTitle("Vítejte")
-        layout = QVBoxLayout()
+        self.setTitle("Vítejte v konfigurátoru")
         text = "Tento průvodce vám pomůže vytvořit přístupný instalátor pro vaši aplikaci."
-        self.setAccessibleName(f"Stránka Úvod. {text}")
+        self.setAccessibleName("Úvodní stránka")
         
-        label = QLabel(text)
-        label.setWordWrap(True)
-        layout.addWidget(label)
+        layout = QVBoxLayout()
+        self.label = QLabel(text)
+        self.label.setWordWrap(True)
+        self.label.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.label.setAccessibleName(f"Vítejte. {text}")
+        layout.addWidget(self.label)
         self.setLayout(layout)
+
+    def initializePage(self):
+        self.label.setFocus()
 
 class AppInfoPage(QWizardPage):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setTitle("Informace o aplikaci")
-        self.setAccessibleName("Stránka Informace o aplikaci. Zadejte název, autora a verzi.")
+        self.setAccessibleName("Informace o aplikaci")
+        
         layout = QVBoxLayout()
-
         layout.addWidget(QLabel("Název aplikace:"))
         self.appNameEdit = QLineEdit()
         self.appNameEdit.setAccessibleName("Název aplikace")
@@ -68,9 +73,9 @@ class FileSelectionPage(QWizardPage):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setTitle("Výběr souborů")
-        self.setAccessibleName("Stránka Výběr souborů. Vyberte hlavní EXE a složku aplikace.")
+        self.setAccessibleName("Výběr souborů")
+        
         layout = QVBoxLayout()
-
         layout.addWidget(QLabel("Cesta k hlavnímu EXE souboru:"))
         exeLayout = QHBoxLayout()
         self.exePathEdit = QLineEdit()
@@ -83,10 +88,12 @@ class FileSelectionPage(QWizardPage):
         layout.addLayout(exeLayout)
         self.registerField("exePath*", self.exePathEdit)
 
-        layout.addWidget(QLabel("Cesta ke složce aplikace (onedir):"))
+        self.dirDescLabel = QLabel("Složka aplikace (DŮLEŽITÉ: U --onedir vyberte složku obsahující _internal):")
+        self.dirDescLabel.setWordWrap(True)
+        layout.addWidget(self.dirDescLabel)
         dirLayout = QHBoxLayout()
         self.dirPathEdit = QLineEdit()
-        self.dirPathEdit.setAccessibleName("Cesta ke složce")
+        self.dirPathEdit.setAccessibleName("Složka aplikace")
         self.dirBrowseBtn = QPushButton("Procházet...")
         self.dirBrowseBtn.setAccessibleName("Procházet složku")
         self.dirBrowseBtn.clicked.connect(self.browseDir)
@@ -111,9 +118,9 @@ class InstallationSettingsPage(QWizardPage):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setTitle("Nastavení instalace")
-        self.setAccessibleName("Stránka Nastavení instalace. Vyberte cílovou architekturu.")
+        self.setAccessibleName("Nastavení instalace")
+        
         layout = QVBoxLayout()
-
         layout.addWidget(QLabel("Výchozí umístění instalace:"))
         self.installDirCombo = QComboBox()
         self.installDirCombo.addItems(["Program Files (64-bit)", "Program Files (32-bit/x86)"])
@@ -128,11 +135,13 @@ class FinishPage(QWizardPage):
         super().__init__(parent)
         self.setTitle("Dokončení")
         desc = "Nyní si můžete vybrat, zda chcete vygenerovat pouze Inno Setup skript, nebo přímo vytvořit hotový EXE instalátor."
-        self.setAccessibleName(f"Stránka Dokončení. {desc}")
+        self.setAccessibleName("Dokončení")
         
         layout = QVBoxLayout()
         self.label = QLabel(desc)
         self.label.setWordWrap(True)
+        self.label.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.label.setAccessibleName(desc)
         layout.addWidget(self.label)
 
         self.btnIss = QPushButton("Generovat .iss skript")
@@ -147,6 +156,9 @@ class FinishPage(QWizardPage):
 
         self.setLayout(layout)
 
+    def initializePage(self):
+        self.label.setFocus()
+
     def get_data(self):
         return {
             "appName": self.field("appName"),
@@ -157,8 +169,23 @@ class FinishPage(QWizardPage):
             "installDir": self.field("installDir")
         }
 
+    def validate_paths(self, data):
+        # Kontrola, zda je EXE uvnitř vybrané složky (pokud je složka vybrána)
+        if data['dirPath'] and os.path.exists(data['dirPath']):
+            exe_path = os.path.abspath(data['exePath'])
+            dir_path = os.path.abspath(data['dirPath'])
+            if not exe_path.startswith(dir_path):
+                reply = QMessageBox.warning(self, "Varování", 
+                    "Vybraný EXE soubor se nenachází ve vybrané složce aplikace. "
+                    "To pravděpodobně způsobí chybu po instalaci. Chcete přesto pokračovat?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                return reply == QMessageBox.StandardButton.Yes
+        return True
+
     def handle_iss(self):
         data = self.get_data()
+        if not self.validate_paths(data): return
+        
         file_path, _ = QFileDialog.getSaveFileName(self, "Uložit Inno Setup skript", f"{data['appName']}.iss", "Inno Setup Script (*.iss)")
         if file_path:
             template_path = os.path.join(os.path.dirname(__file__), "..", "..", "templates", "base_template.iss")
@@ -170,6 +197,8 @@ class FinishPage(QWizardPage):
 
     def handle_exe(self):
         data = self.get_data()
+        if not self.validate_paths(data): return
+        
         file_path, _ = QFileDialog.getSaveFileName(self, "Uložit EXE instalátor", f"{data['appName']}_Setup.exe", "Spustitelný soubor (*.exe)")
         if file_path:
             progress = QProgressDialog("Sestavuji instalátor, prosím čekejte...", None, 0, 0, self)

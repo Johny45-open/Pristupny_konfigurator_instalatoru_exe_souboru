@@ -7,43 +7,6 @@ from PyQt6.QtWidgets import (QApplication, QWizard, QWizardPage, QVBoxLayout,
                              QProgressBar, QMessageBox)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 
-# Moderní Tmavý Režim (Dark Mode) pro instalátor
-DARK_STYLESHEET = """
-QWizard, QWizardPage, QDialog {
-    background-color: #000000;
-    color: #ffffff;
-}
-QLabel {
-    color: #ffffff;
-    font-size: 15px;
-}
-QLineEdit {
-    padding: 10px;
-    border: 2px solid #ffffff;
-    border-radius: 4px;
-    background-color: #121212;
-    color: #ffffff;
-}
-QProgressBar {
-    border: 2px solid #ffffff;
-    border-radius: 4px;
-    text-align: center;
-    background-color: #121212;
-    color: #ffffff;
-}
-QProgressBar::chunk {
-    background-color: #0078d7;
-}
-QPushButton {
-    padding: 10px 20px;
-    background-color: #222222;
-    border: 2px solid #ffffff;
-    border-radius: 4px;
-    color: #ffffff;
-    font-weight: bold;
-}
-"""
-
 class InstallationThread(QThread):
     progress = pyqtSignal(int)
     status = pyqtSignal(str)
@@ -90,24 +53,31 @@ class IntroPage(QWizardPage):
         super().__init__()
         self.setTitle("Vítejte")
         text = f"Vítá vás instalace programu {config['appName']}. Pokračujte stisknutím tlačítka Další."
-        self.setAccessibleName(text)
+        self.setAccessibleName("Úvodní stránka")
         
         layout = QVBoxLayout()
-        label = QLabel(text)
-        label.setWordWrap(True)
-        layout.addWidget(label)
+        self.label = QLabel(text)
+        self.label.setWordWrap(True)
+        self.label.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.label.setAccessibleName(text)
+        layout.addWidget(self.label)
         self.setLayout(layout)
+
+    def initializePage(self):
+        self.label.setFocus()
 
 class DirectoryPage(QWizardPage):
     def __init__(self, config):
         super().__init__()
         self.setTitle("Cílové umístění")
         text = f"Kam má být produkt {config['appName']} nainstalován?"
-        self.setAccessibleName(f"Stránka Cílové umístění. {text}")
+        self.setAccessibleName("Výběr složky")
         
         layout = QVBoxLayout()
-        label = QLabel(text)
-        layout.addWidget(label)
+        self.label = QLabel(text)
+        self.label.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.label.setAccessibleName(text)
+        layout.addWidget(self.label)
 
         self.pathEdit = QLineEdit()
         
@@ -124,15 +94,24 @@ class DirectoryPage(QWizardPage):
         
         self.setLayout(layout)
 
+    def initializePage(self):
+        self.label.setFocus()
+
 class ProgressPage(QWizardPage):
     def __init__(self, config, source_dir):
         super().__init__()
         self.config = config
         self.source_dir = source_dir
-        self.setTitle("Průběh")
-        self.setAccessibleName("Probíhá instalace, prosím čekejte.")
+        self.setTitle("Průběh instalace")
+        text = "Probíhá instalace, prosím čekejte."
+        self.setAccessibleName(text)
         
         layout = QVBoxLayout()
+        self.label = QLabel(text)
+        self.label.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.label.setAccessibleName(text)
+        layout.addWidget(self.label)
+        
         self.statusLabel = QLabel("Připraveno...")
         layout.addWidget(self.statusLabel)
         
@@ -142,6 +121,7 @@ class ProgressPage(QWizardPage):
         self.setLayout(layout)
 
     def initializePage(self):
+        self.label.setFocus()
         self.wizard().button(QWizard.WizardButton.BackButton).setEnabled(False)
         dest = self.field("installPath")
         self.thread = InstallationThread(self.source_dir, dest, self.config)
@@ -163,25 +143,28 @@ class ProgressPage(QWizardPage):
 class FinishPage(QWizardPage):
     def __init__(self, config):
         super().__init__()
-        self.setTitle("Dokončeno")
+        self.setTitle("Instalace dokončena")
         text = f"Program {config['appName']} byl úspěšně nainstalován. Nyní můžete okno zavřít tlačítkem Dokončit."
-        self.setAccessibleName(text)
+        self.setAccessibleName("Dokončeno")
         
         layout = QVBoxLayout()
-        label = QLabel(text)
-        label.setWordWrap(True)
-        layout.addWidget(label)
+        self.label = QLabel(text)
+        self.label.setWordWrap(True)
+        self.label.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.label.setAccessibleName(text)
+        layout.addWidget(self.label)
         self.setLayout(layout)
+
+    def initializePage(self):
+        self.label.setFocus()
 
 class AccessibleWizard(QWizard):
     def __init__(self, config, source_dir):
         super().__init__()
         self.config = config
         self.setWindowTitle(f"Instalace - {config['appName']}")
-        self.setStyleSheet(DARK_STYLESHEET)
         self.setWizardStyle(QWizard.WizardStyle.ModernStyle)
         
-        # Vynucení češtiny
         self.setButtonText(QWizard.WizardButton.NextButton, "Další >")
         self.setButtonText(QWizard.WizardButton.BackButton, "< Zpět")
         self.setButtonText(QWizard.WizardButton.CancelButton, "Zrušit")
@@ -221,4 +204,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-Applied fuzzy match at line 146-163.

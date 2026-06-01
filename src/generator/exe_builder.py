@@ -31,7 +31,6 @@ def build_installer(data, output_exe_path):
         
         # Kopírování složky (pokud existuje)
         if data.get('dirPath') and os.path.exists(data['dirPath']):
-            # Kopírujeme obsah složky do payload
             for item in os.listdir(data['dirPath']):
                 s = os.path.join(data['dirPath'], item)
                 d = os.path.join(payload_dir, item)
@@ -41,15 +40,12 @@ def build_installer(data, output_exe_path):
                     shutil.copy2(s, d)
 
         # 4. Spuštění PyInstalleru
-        # --onefile: jeden EXE
-        # --windowed: bez konzole
-        # --add-data: přidání configu a payloadu do EXE
-        # Všimněte si oddělovače cest (;) pro Windows
-        
+        # --uac-admin: Vyžádá práva správce při spuštění instalátoru (nutné pro Program Files)
         cmd = [
             "pyinstaller",
             "--onefile",
             "--windowed",
+            "--uac-admin",
             f"--name={data['appName']}_Setup",
             f"--add-data=config.json;.",
             f"--add-data=payload;payload",
@@ -60,9 +56,10 @@ def build_installer(data, output_exe_path):
         try:
             subprocess.run(cmd, cwd=tmpdir, check=True, capture_output=True)
             
-            # 5. Přesun výsledku
             dist_exe = os.path.join(tmpdir, "dist", f"{data['appName']}_Setup.exe")
             if os.path.exists(dist_exe):
+                if os.path.exists(output_exe_path):
+                    os.remove(output_exe_path)
                 shutil.move(dist_exe, output_exe_path)
                 return True
             return False

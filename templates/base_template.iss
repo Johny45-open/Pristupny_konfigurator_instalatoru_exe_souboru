@@ -17,6 +17,16 @@ ArchitecturesInstallIn64BitMode={#ArchitecturesInstallIn64BitMode}
 [Languages]
 Name: "czech"; MessagesFile: "compiler:Languages\Czech.isl"
 
+[CustomMessages]
+; Vlastní zprávy pro přístupnost (přístupné přes CustomMessage)
+SelectDirDesc=Kam má být produkt {#AppName} nainstalován? Průvodce nainstaluje produkt do následující složky. Pokračujte klepnutím na tlačítko Další.
+SelectProgramGroupDesc=Kam má průvodce umístit zástupce aplikace? Průvodce vytvoří zástupce v následující složce nabídky Start. Pokračujte klepnutím na tlačítko Další.
+
+[Messages]
+; Vylepšení přístupnosti pro dialog zrušení instalace (přepisuje systémové zprávy)
+czech.ExitSetupTitle=Ukončení instalace
+czech.ExitSetupMessage=Chcete skutečně přerušit instalaci programu {#AppName}? Pokud ji nyní ukončíte, program nebude nainstalován. Stiskněte Ano pro ukončení nebo Ne pro pokračování v instalaci.
+
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
@@ -31,22 +41,12 @@ Name: "{commondesktop}\{#AppName}"; Filename: "{app}\{#ExeName}"; Tasks: desktop
 [Run]
 Filename: "{app}\{#ExeName}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
 
-[Messages]
-; Vylepšení přístupnosti pro dialog zrušení instalace
-czech.ExitSetupTitle=Ukončení instalace
-czech.ExitSetupMessage=Chcete skutečně přerušit instalaci programu {#AppName}? Pokud ji nyní ukončíte, program nebude nainstalován. Stiskněte Ano pro ukončení nebo Ne pro pokračování v instalaci.
-
-; Oprava čtení instrukcí na stránkách
-czech.SelectDirDesc=Kam má být produkt {#AppName} nainstalován? Průvodce nainstaluje produkt do následující složky. Pokračujte klepnutím na tlačítko Další.
-czech.SelectProgramGroupDesc=Kam má průvodce umístit zástupce aplikace? Průvodce vytvoří zástupce v následující složce nabídky Start. Pokračujte klepnutím na tlačítko Další.
-
 [Code]
 // Procedura pro vynucení čtení instrukcí při změně stránky
 procedure CurPageChanged(CurPageID: Integer);
 var
   InstructionText: String;
 begin
-  // Při změně stránky se pokusíme zaměřit text, který má čtečka přečíst
   case CurPageID of
     wpSelectDir:
       InstructionText := 'Zvolte cílové umístění. ' + CustomMessage('SelectDirDesc');
@@ -55,10 +55,6 @@ begin
     wpSelectTasks:
       InstructionText := 'Vyberte další úlohy, které mají být provedeny.';
   end;
-  
-  // Tip pro přístupnost: Inno Setup standardně dává fokus na editační pole nebo seznam.
-  // Můžeme zkusit nastavit popisek jako "vyskakovací" hlášení pro čtečky, 
-  // nebo zajistit, aby editační pole mělo správný AccessibleName obsahující i instrukci.
 end;
 
 // Funkce pro úpravu popisků za běhu pro lepší přístupnost
