@@ -179,6 +179,14 @@ class FinishPage(QWizardPage):
         }
 
     def validate_paths(self, data):
+        # Najdeme stránku s výběrem souborů, abychom mohli případně opravit UI
+        file_page = None
+        for i in self.wizard().pageIds():
+            page = self.wizard().page(i)
+            if isinstance(page, FileSelectionPage):
+                file_page = page
+                break
+
         # Kontrola, zda je EXE uvnitř vybrané složky (pokud je složka vybrána)
         if data['dirPath'] and os.path.exists(data['dirPath']):
             exe_path = os.path.abspath(data['exePath'])
@@ -195,8 +203,8 @@ class FinishPage(QWizardPage):
                             "(tu, ve které je váš EXE i složka se závislostmi).\n\n"
                             "Chcete automaticky nastavit nadřazenou složku?",
                             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-                        if reply == QMessageBox.StandardButton.Yes:
-                            self.dirPathEdit.setText(parent_dir)
+                        if reply == QMessageBox.StandardButton.Yes and file_page:
+                            file_page.dirPathEdit.setText(parent_dir)
                             return False # Necháme uživatele zkontrolovat
                 
                 QMessageBox.warning(self, "Chyba cesty", 
@@ -212,8 +220,8 @@ class FinishPage(QWizardPage):
                     "To obvykle vede k chybám při spouštění (nenalezení DLL). "
                     "Chcete automaticky změnit složku aplikace na tu, kde je EXE?",
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-                if reply == QMessageBox.StandardButton.Yes:
-                    self.dirPathEdit.setText(os.path.dirname(exe_path))
+                if reply == QMessageBox.StandardButton.Yes and file_page:
+                    file_page.dirPathEdit.setText(os.path.dirname(exe_path))
                     return False # Necháme uživatele zkontrolovat změnu
         
         # Pokud je to onedir build (existuje _internal u EXE) a uživatel nevybral dirPath
@@ -223,8 +231,8 @@ class FinishPage(QWizardPage):
                 "U vašeho EXE souboru byla nalezena složka '_internal', ale nevybrali jste 'Složku aplikace'. "
                 "Bez ní program po instalaci nebude fungovat. Chcete ji doplnit automaticky?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-             if reply == QMessageBox.StandardButton.Yes:
-                 self.dirPathEdit.setText(exe_dir)
+             if reply == QMessageBox.StandardButton.Yes and file_page:
+                 file_page.dirPathEdit.setText(exe_dir)
                  return False
 
         return True
