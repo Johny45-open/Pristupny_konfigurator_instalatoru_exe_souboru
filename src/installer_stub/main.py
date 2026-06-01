@@ -27,6 +27,10 @@ class InstallationThread(QThread):
             total = len(files)
             
             if total == 0:
+                # Uložíme konfiguraci pro odinstalátor
+                config_for_uninstaller = os.path.join(self.dest_dir, "install_config.json")
+                with open(config_for_uninstaller, "w", encoding="utf-8") as f:
+                    json.dump(self.config, f, ensure_ascii=False, indent=4)
                 self.finished_signal.emit(True, "Instalace byla úspěšně dokončena.")
                 return
 
@@ -44,6 +48,10 @@ class InstallationThread(QThread):
                 self.progress.emit(percent)
                 self.status.emit(f"Instaluji: {f}")
             
+            # Uložíme konfiguraci pro odinstalátor
+            config_for_uninstaller = os.path.join(self.dest_dir, "install_config.json")
+            with open(config_for_uninstaller, "w", encoding="utf-8") as f:
+                json.dump(self.config, f, ensure_ascii=False, indent=4)
             self.finished_signal.emit(True, "Instalace byla úspěšně dokončena.")
         except Exception as e:
             self.finished_signal.emit(False, str(e))
