@@ -185,9 +185,23 @@ class FinishPage(QWizardPage):
             dir_path = os.path.abspath(data['dirPath'])
             
             if not exe_path.startswith(dir_path):
+                # Speciální případ: uživatel vybral přímo _internal místo kořene aplikace
+                if os.path.basename(dir_path).lower() in ["_internal", "lib"]:
+                    parent_dir = os.path.dirname(dir_path)
+                    if exe_path.startswith(parent_dir):
+                        reply = QMessageBox.question(self, "Nesprávná složka", 
+                            f"Vybrali jste přímo složku '{os.path.basename(dir_path)}'. "
+                            "Pro správnou funkci instalátoru je nutné vybrat celou složku aplikace "
+                            "(tu, ve které je váš EXE i složka se závislostmi).\n\n"
+                            "Chcete automaticky nastavit nadřazenou složku?",
+                            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                        if reply == QMessageBox.StandardButton.Yes:
+                            self.dirPathEdit.setText(parent_dir)
+                            return False # Necháme uživatele zkontrolovat
+                
                 QMessageBox.warning(self, "Chyba cesty", 
                     "Vybraný EXE soubor se nenachází ve vybrané složce aplikace. "
-                    "Opravte prosím výběr.")
+                    "Ujistěte se, že vybíráte složku, která váš EXE soubor obsahuje.")
                 return False
             
             # Kontrola, zda je EXE přímo v té složce, ne o úroveň hlouběji
