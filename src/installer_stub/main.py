@@ -81,12 +81,15 @@ class DirectoryPage(QWizardPage):
 
         self.pathEdit = QLineEdit()
         
+        # Logika pro výběr Program Files na základě konfigurace
         if config.get('installDir', 0) == 0:
             pf = os.environ.get("ProgramW6432") or os.environ.get("ProgramFiles")
         else:
             pf = os.environ.get("ProgramFiles(x86)") or os.environ.get("ProgramFiles")
             
-        default_path = os.path.join(pf, config['appName'])
+        # Použijeme safeName (bez diakritiky) pro název složky, aby fungovalo načítání DLL
+        folder_name = config.get('safeName', config['appName'])
+        default_path = os.path.join(pf, folder_name)
         self.pathEdit.setText(default_path)
         self.pathEdit.setAccessibleName("Cesta k instalaci")
         layout.addWidget(self.pathEdit)

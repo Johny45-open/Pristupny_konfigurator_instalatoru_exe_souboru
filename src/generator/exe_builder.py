@@ -3,33 +3,44 @@ import subprocess
 import json
 import shutil
 import tempfile
+import unicodedata
+import re
+
+def slugify(value):
+    """
+    Převede text na bezpečný název pro souborový systém (bez diakritiky, mezer a spec. znaků).
+    Např. "Přístupná Aplikace 1.0" -> "Pristupna_Aplikace_10"
+    """
+    value = unicodedata.normalize('NFKD', value).encode('ascii', 'ignore').decode('ascii')
+    value = re.sub(r'[^\w\s-]', '', value).strip().replace(' ', '_')
+    return re.sub(r'[-\s]+', '-', value)
 
 def build_installer(data, output_exe_path):
     """
     Sestaví samostatný EXE instalátor pomocí PyInstalleru.
-    data: slovník s metadaty (appName, appVersion, exePath, dirPath)
-    output_exe_path: kam uložit výsledný instalátor
     """
+    # Vytvoříme bezpečný název pro souborový systém
+    safe_name = slugify(data['appName'])
+    data['safeName'] = safe_name # Přidáme do dat pro instalátor
+
     with tempfile.TemporaryDirectory() as tmpdir:
         # 1. Příprava struktury v dočasné složce
         stub_dir = os.path.join(os.path.dirname(__file__), "..", "installer_stub")
         shutil.copytree(stub_dir, tmpdir, dirs_exist_ok=True)
         
-        # 2. Vytvoření config.json
+        # 2. Vytvoření config.json (obsahuje hezký i bezpečný název)
         config_path = os.path.join(tmpdir, "config.json")
         with open(config_path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=4)
         
-        # 3. Příprava payload (soubory k instalaci)
+        # 3. Příprava payload
         payload_dir = os.path.join(tmpdir, "payload")
         if os.path.exists(payload_dir):
             shutil.rmtree(payload_dir)
         os.makedirs(payload_dir)
         
-        # Kopírování hlavního EXE
         shutil.copy2(data['exePath'], payload_dir)
         
-        # Kopírování složky (pokud existuje)
         if data.get('dirPath') and os.path.exists(data['dirPath']):
             for item in os.listdir(data['dirPath']):
                 s = os.path.join(data['dirPath'], item)
@@ -39,14 +50,13 @@ def build_installer(data, output_exe_path):
                 else:
                     shutil.copy2(s, d)
 
-        # 4. Spuštění PyInstalleru
-        # --uac-admin: Vyžádá práva správce při spuštění instalátoru (nutné pro Program Files)
+        # 4. Spuštění PyInstalleru s BEZPEČNÝM názvem
         cmd = [
             "pyinstaller",
             "--onefile",
             "--windowed",
             "--uac-admin",
-            f"--name={data['appName']}_Setup",
+            f"--name={safe_name}_Setup", # Používáme bezpečný název pro soubor
             f"--add-data=config.json;.",
             f"--add-data=payload;payload",
             "--clean",
@@ -56,7 +66,7 @@ def build_installer(data, output_exe_path):
         try:
             subprocess.run(cmd, cwd=tmpdir, check=True, capture_output=True)
             
-            dist_exe = os.path.join(tmpdir, "dist", f"{data['appName']}_Setup.exe")
+            dist_exe = os.path.join(tmpdir, "dist", f"{safe_name}_Setup.exe")
             if os.path.exists(dist_exe):
                 if os.path.exists(output_exe_path):
                     os.remove(output_exe_path)
