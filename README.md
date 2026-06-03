@@ -1,3 +1,5 @@
+<div lang="cs">
+
 # Přístupný konfigurátor instalátorů (EXE)
 
 Tento nástroj slouží k vytváření plně přístupných instalátorů pro Windows. Je navržen s důrazem na uživatele čteček obrazovky (NVDA, JAWS) a umožňuje vývojářům snadno zabalit jejich aplikace do profesionálních instalátorů (Inno Setup) nebo přímo do spustitelného EXE souboru.
@@ -41,3 +43,5 @@ Aplikace používá `AccessibleName` a `AccessibleDescription` pro všechna pole
 
 ---
 Vytvořeno s důrazem na přístupnost bez bariér.
+
+</div>
