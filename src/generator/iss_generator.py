@@ -38,7 +38,10 @@ def generate_iss(data, output_path, template_path):
         "{#ArchitecturesInstallIn64BitMode}": arch_mode,
         "{#ExePath}": exe_path,
         "{#ExeName}": exe_name,
-        "{#ExtraFiles}": extra_files
+        "{#ExtraFiles}": extra_files,
+        "{#DesktopShortcutTask}": 'Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked' if data.get('createDesktopShortcut') else "",
+        "{#StartMenuShortcut}": f'Name: "{{group}}\\{app_name}"; Filename: "{{app}}\\{exe_name}"' if data.get('createStartMenuShortcut') else "",
+        "{#DesktopShortcut}": f'Name: "{{commondesktop}}\\{app_name}"; Filename: "{{app}}\\{exe_name}"; Tasks: desktopicon' if data.get('createDesktopShortcut') else ""
     }
 
     iss_content = template

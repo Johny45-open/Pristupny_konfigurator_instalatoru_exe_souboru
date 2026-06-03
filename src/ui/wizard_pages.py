@@ -1,5 +1,5 @@
 from PyQt6.QtWidgets import (QWizardPage, QVBoxLayout, QLabel, QLineEdit, QFileDialog, 
-                             QPushButton, QHBoxLayout, QComboBox, QMessageBox, QProgressDialog, QApplication)
+                             QPushButton, QHBoxLayout, QComboBox, QMessageBox, QProgressDialog, QApplication, QCheckBox)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 import os
 from generator.iss_generator import generate_iss
@@ -133,9 +133,23 @@ class InstallationSettingsPage(QWizardPage):
         layout.addWidget(QLabel("Výchozí umístění instalace:"))
         self.installDirCombo = QComboBox()
         self.installDirCombo.addItems(["Program Files (64-bit)", "Program Files (32-bit/x86)"])
-        self.installDirCombo.setAccessibleName("Výchozí umístění")
+        self.installDirCombo.setAccessibleName("Výchozí umístění, výběrové pole")
         layout.addWidget(self.installDirCombo)
         self.registerField("installDir", self.installDirCombo)
+
+        layout.addSpacing(20)
+        
+        self.createDesktopShortcut = QCheckBox("Vytvořit zástupce na ploše")
+        self.createDesktopShortcut.setAccessibleName("Vytvořit zástupce na ploše, zaškrtávací pole")
+        self.createDesktopShortcut.setChecked(True)
+        layout.addWidget(self.createDesktopShortcut)
+        self.registerField("createDesktopShortcut", self.createDesktopShortcut)
+
+        self.createStartMenuShortcut = QCheckBox("Vytvořit zástupce v nabídce Start")
+        self.createStartMenuShortcut.setAccessibleName("Vytvořit zástupce v nabídce Start, zaškrtávací pole")
+        self.createStartMenuShortcut.setChecked(True)
+        layout.addWidget(self.createStartMenuShortcut)
+        self.registerField("createStartMenuShortcut", self.createStartMenuShortcut)
 
         self.setLayout(layout)
 
@@ -175,7 +189,9 @@ class FinishPage(QWizardPage):
             "appAuthor": self.field("appAuthor"),
             "exePath": self.field("exePath"),
             "dirPath": self.field("dirPath"),
-            "installDir": self.field("installDir")
+            "installDir": self.field("installDir"),
+            "createDesktopShortcut": self.field("createDesktopShortcut"),
+            "createStartMenuShortcut": self.field("createStartMenuShortcut")
         }
 
     def validate_paths(self, data):

@@ -28,15 +28,15 @@ czech.ExitSetupTitle=Ukončení instalace
 czech.ExitSetupMessage=Chcete skutečně přerušit instalaci programu {#AppName}? Pokud ji nyní ukončíte, program nebude nainstalován. Stiskněte Ano pro ukončení nebo Ne pro pokračování v instalaci.
 
 [Tasks]
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+{#DesktopShortcutTask}
 
 [Files]
 Source: "{#ExePath}"; DestDir: "{app}"; Flags: ignoreversion
 {#ExtraFiles}
 
 [Icons]
-Name: "{group}\{#AppName}"; Filename: "{app}\{#ExeName}"
-Name: "{commondesktop}\{#AppName}"; Filename: "{app}\{#ExeName}"; Tasks: desktopicon
+{#StartMenuShortcut}
+{#DesktopShortcut}
 
 [Run]
 Filename: "{app}\{#ExeName}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent

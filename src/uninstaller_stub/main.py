@@ -18,12 +18,24 @@ class UninstallationThread(QThread):
 
     def run(self):
         try:
-            # V reálném světě bychom mazali podle seznamu souborů, 
-            # ale u --onedir je bezpečné smazat celou složku, pokud tam uživatel nemá data.
-            # Zde pro zjednodušení smažeme celou instalační složku.
+            # Odstranění zástupců
+            app_name = self.config.get('appName', 'Aplikace')
             
+            # Plocha
+            desktop = os.path.join(os.environ['USERPROFILE'], 'Desktop')
+            desktop_shortcut = os.path.join(desktop, f"{app_name}.lnk")
+            if os.path.exists(desktop_shortcut):
+                self.status.emit("Odstraňuji zástupce na ploše...")
+                os.remove(desktop_shortcut)
+
+            # Nabídka Start
+            start_menu = os.path.join(os.environ['APPDATA'], 'Microsoft', 'Windows', 'Start Menu', 'Programs')
+            start_shortcut = os.path.join(start_menu, f"{app_name}.lnk")
+            if os.path.exists(start_shortcut):
+                self.status.emit("Odstraňuji zástupce v nabídce Start...")
+                os.remove(start_shortcut)
+
             if os.path.exists(self.install_dir):
-                # Získáme seznam věcí ke smazání pro progress bar
                 items = os.listdir(self.install_dir)
                 total = len(items)
                 

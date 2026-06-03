@@ -2,9 +2,10 @@ import sys
 import os
 import shutil
 import json
+import subprocess
 from PyQt6.QtWidgets import (QApplication, QWizard, QWizardPage, QVBoxLayout, 
                              QLabel, QLineEdit, QPushButton, QHBoxLayout, 
-                             QProgressBar, QMessageBox)
+                             QProgressBar, QMessageBox, QCheckBox)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 
 class InstallationThread(QThread):
@@ -17,6 +18,16 @@ class InstallationThread(QThread):
         self.source_dir = source_dir
         self.dest_dir = dest_dir
         self.config = config
+
+    def create_shortcut(self, target_path, shortcut_path):
+        """Vytvoří zástupce pomocí PowerShellu."""
+        try:
+            ps_script = f'$s = (New-Object -ComObject WScript.Shell).CreateShortcut("{shortcut_path}"); $s.TargetPath = "{target_path}"; $s.WorkingDirectory = "{os.path.dirname(target_path)}"; $s.Save()'
+            subprocess.run(["powershell", "-Command", ps_script], check=True, capture_output=True)
+            return True
+        except Exception as e:
+            print(f"Chyba při vytváření zástupce: {e}")
+            return False
 
     def run(self):
         try:
@@ -31,7 +42,7 @@ class InstallationThread(QThread):
                 config_for_uninstaller = os.path.join(self.dest_dir, "install_config.json")
                 with open(config_for_uninstaller, "w", encoding="utf-8") as f:
                     json.dump(self.config, f, ensure_ascii=False, indent=4)
-                self.finished_signal.emit(True, "Instalace byla úspěšně dokončena.")
+                self.finished_signal.emit(True, "Instalace byla úspěšně dokončena (nebyl nalezen žádný payload).")
                 return
 
             for i, f in enumerate(files):
@@ -44,9 +55,28 @@ class InstallationThread(QThread):
                 else:
                     shutil.copy2(src, dst)
                 
-                percent = int(((i + 1) / total) * 100)
+                percent = int(((i + 1) / total) * 0.8 * 100) # Kopírování je 80%
                 self.progress.emit(percent)
                 self.status.emit(f"Instaluji: {f}")
+
+            # Vytvoření zástupců
+            exe_name = os.path.basename(self.config.get('exePath', ''))
+            target_exe = os.path.join(self.dest_dir, exe_name)
+            app_name = self.config.get('appName', 'Aplikace')
+
+            if self.config.get('createDesktopShortcut'):
+                self.status.emit("Vytvářím zástupce na ploše...")
+                desktop = os.path.join(os.environ['USERPROFILE'], 'Desktop')
+                shortcut_path = os.path.join(desktop, f"{app_name}.lnk")
+                self.create_shortcut(target_exe, shortcut_path)
+
+            if self.config.get('createStartMenuShortcut'):
+                self.status.emit("Vytvářím zástupce v nabídce Start...")
+                start_menu = os.path.join(os.environ['APPDATA'], 'Microsoft', 'Windows', 'Start Menu', 'Programs')
+                shortcut_path = os.path.join(start_menu, f"{app_name}.lnk")
+                self.create_shortcut(target_exe, shortcut_path)
+            
+            self.progress.emit(100)
             
             # Uložíme konfiguraci pro odinstalátor
             config_for_uninstaller = os.path.join(self.dest_dir, "install_config.json")
