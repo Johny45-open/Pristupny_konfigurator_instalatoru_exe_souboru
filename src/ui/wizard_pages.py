@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import (QWizardPage, QVBoxLayout, QLabel, QLineEdit, QFileDialog, 
                              QPushButton, QHBoxLayout, QComboBox, QMessageBox, QProgressDialog, QApplication, QCheckBox)
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer
 import os
 from generator.iss_generator import generate_iss
 from generator.exe_builder import build_installer
@@ -133,20 +133,20 @@ class InstallationSettingsPage(QWizardPage):
         layout.addWidget(QLabel("Výchozí umístění instalace:"))
         self.installDirCombo = QComboBox()
         self.installDirCombo.addItems(["Program Files (64-bit)", "Program Files (32-bit/x86)"])
-        self.installDirCombo.setAccessibleName("Výchozí umístění, výběrové pole")
+        self.installDirCombo.setAccessibleName("Výchozí umístění")
         layout.addWidget(self.installDirCombo)
         self.registerField("installDir", self.installDirCombo)
 
         layout.addSpacing(20)
         
         self.createDesktopShortcut = QCheckBox("Vytvořit zástupce na ploše")
-        self.createDesktopShortcut.setAccessibleName("Vytvořit zástupce na ploše, zaškrtávací pole")
+        self.createDesktopShortcut.setAccessibleName("Vytvořit zástupce na ploše")
         self.createDesktopShortcut.setChecked(True)
         layout.addWidget(self.createDesktopShortcut)
         self.registerField("createDesktopShortcut", self.createDesktopShortcut)
 
         self.createStartMenuShortcut = QCheckBox("Vytvořit zástupce v nabídce Start")
-        self.createStartMenuShortcut.setAccessibleName("Vytvořit zástupce v nabídce Start, zaškrtávací pole")
+        self.createStartMenuShortcut.setAccessibleName("Vytvořit zástupce v nabídce Start")
         self.createStartMenuShortcut.setChecked(True)
         layout.addWidget(self.createStartMenuShortcut)
         self.registerField("createStartMenuShortcut", self.createStartMenuShortcut)
@@ -164,7 +164,6 @@ class FinishPage(QWizardPage):
         self.label = QLabel(desc)
         self.label.setWordWrap(True)
         self.label.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.label.setAccessibleName(desc)
         layout.addWidget(self.label)
 
         self.btnIss = QPushButton("Generovat .iss skript")
@@ -262,8 +261,11 @@ class FinishPage(QWizardPage):
             template_path = os.path.join(os.path.dirname(__file__), "..", "..", "templates", "base_template.iss")
             try:
                 generate_iss(data, file_path, template_path)
+                # Dáme systému čas zpracovat návrat fokusu z file dialogu
+                QApplication.processEvents()
                 QMessageBox.information(self, "Úspěch", f"Skript byl úspěšně vygenerován.")
             except Exception as e:
+                QApplication.processEvents()
                 QMessageBox.critical(self, "Chyba", str(e))
 
     def handle_exe(self):
@@ -272,10 +274,13 @@ class FinishPage(QWizardPage):
         
         file_path, _ = QFileDialog.getSaveFileName(self, "Uložit EXE instalátor", f"{data['appName']}_Setup.exe", "Spustitelný soubor (*.exe)")
         if file_path:
-            progress = QProgressDialog("Sestavuji instalátor, prosím čekejte...", None, 0, 0, self)
+            progress = QProgressDialog("Sestavuji instalátor, prosím čekejte...", None, 0, 0, self.window())
             progress.setWindowTitle("Pracuji...")
             progress.setWindowModality(Qt.WindowModality.WindowModal)
+            progress.setWindowFlags(Qt.WindowType.CustomizeWindowHint | Qt.WindowType.WindowTitleHint)
+            progress.setAccessibleName("Okénko průběhu")
             progress.show()
+            progress.setFocus()
             
             QApplication.processEvents()
             
@@ -285,8 +290,13 @@ class FinishPage(QWizardPage):
             self.build_thread.start()
 
     def on_build_finished(self, success, message):
+        # Mírné zpoždění (200ms) umožní NVDA dokončit hlášení o návratu fokusu 
+        # a čistě přejít na nové hlášení o úspěchu/chybě.
+        QTimer.singleShot(200, lambda: self.show_result(success, message))
+
+    def show_result(self, success, message):
         if success:
-            QMessageBox.information(self, "Úspěch", "Instalátor byl úspěšně vytvořen.")
+            QMessageBox.information(self, "Úspěch", message)
         else:
             QMessageBox.critical(self, "Chyba při sestavování", message)
 
