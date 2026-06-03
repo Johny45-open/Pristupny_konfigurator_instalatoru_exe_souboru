@@ -159,6 +159,8 @@ class FinishPage(QWizardPage):
         self.setTitle("Dokončení")
         desc = "Nyní si můžete vybrat, zda chcete vygenerovat pouze Inno Setup skript, nebo přímo vytvořit hotový EXE instalátor."
         self.setAccessibleName("Dokončení")
+        self.is_building = False
+        self.is_finished = False
         
         layout = QVBoxLayout()
         self.label = QLabel(desc)
@@ -274,6 +276,7 @@ class FinishPage(QWizardPage):
         
         file_path, _ = QFileDialog.getSaveFileName(self, "Uložit EXE instalátor", f"{data['appName']}_Setup.exe", "Spustitelný soubor (*.exe)")
         if file_path:
+            self.is_building = True
             progress = QProgressDialog("Sestavuji instalátor, prosím čekejte...", None, 0, 0, self.window())
             progress.setWindowTitle("Pracuji...")
             progress.setWindowModality(Qt.WindowModality.WindowModal)
@@ -290,6 +293,9 @@ class FinishPage(QWizardPage):
             self.build_thread.start()
 
     def on_build_finished(self, success, message):
+        self.is_building = False
+        if success:
+            self.is_finished = True
         # Mírné zpoždění (200ms) umožní NVDA dokončit hlášení o návratu fokusu 
         # a čistě přejít na nové hlášení o úspěchu/chybě.
         QTimer.singleShot(200, lambda: self.show_result(success, message))
