@@ -5,11 +5,21 @@ import shutil
 import tempfile
 import unicodedata
 import re
+import sys
+
+def get_resource_path(relative_path):
+    """ Získá absolutní cestu ke zdroji, funguje pro vývoj i pro PyInstaller. """
+    try:
+        # PyInstaller vytvoří dočasnou složku a uloží cestu do _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        # Pokud neběžíme v PyInstalleru, použijeme cestu vzhledem k tomuto souboru
+        base_path = os.path.dirname(os.path.abspath(__file__))
+
+    return os.path.join(base_path, relative_path)
 
 def slugify(value):
-    """
-    Převede text na bezpečný název pro souborový systém.
-    """
+    # ... (zachovám původní funkci slugify)
     value = unicodedata.normalize('NFKD', value).encode('ascii', 'ignore').decode('ascii')
     value = re.sub(r'[^\w\s-]', '', value).strip().replace(' ', '_')
     return re.sub(r'[-\s]+', '-', value)
@@ -24,14 +34,13 @@ def build_installer(data, output_exe_path):
     with tempfile.TemporaryDirectory() as tmpdir:
         # --- KROK 1: Sestavení odinstalátoru (Uninstaller) ---
         uninst_tmp = os.path.join(tmpdir, "uninst_build")
-        
-        # Oprava cesty: použijeme absolutní cestu k adresáři, kde leží exe_builder.py, a pak se posuneme nahoru
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        uninst_stub = os.path.join(current_dir, "..", "uninstaller_stub")
-        
+
+        # Oprava cesty pomocí nové helper funkce
+        uninst_stub = get_resource_path("../uninstaller_stub")
+
         shutil.copytree(uninst_stub, uninst_tmp)
-        
-        # Pro odinstalátor nepotřebujeme payload, config si najde v cílové složce
+
+        # ... (zbytek funkce zůstává stejný)
         uninst_cmd = [
             "pyinstaller", "--onefile", "--windowed", "--uac-admin",
             f"--name=uninstall", "--clean", "main.py"
@@ -40,9 +49,9 @@ def build_installer(data, output_exe_path):
         uninstall_exe_path = os.path.join(uninst_tmp, "dist", "uninstall.exe")
 
         # --- KROK 2: Příprava hlavního instalátoru (Setup) ---
-        stub_dir = os.path.join(os.path.dirname(__file__), "..", "installer_stub")
+        stub_dir = get_resource_path("../installer_stub")
         shutil.copytree(stub_dir, tmpdir, dirs_exist_ok=True)
-        
+        # ... (zbytek zůstává)**
         # Vytvoření config.json
         config_path = os.path.join(tmpdir, "config.json")
         with open(config_path, "w", encoding="utf-8") as f:
