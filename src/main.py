@@ -42,16 +42,24 @@ class AccessibleWizard(QWizard):
         is_in_progress = self.currentId() > 0 and not (finish_page and finish_page.is_finished)
         
         if is_building:
-            reply = QMessageBox.question(self, "Probíhá sestavování", 
-                "Právě probíhá vytváření instalátoru. Pokud aplikaci zavřete, proces bude přerušen.\n\n"
-                "Opravdu chcete ukončit aplikaci?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Probíhá sestavování")
+            msg.setText("Právě probíhá vytváření instalátoru. Pokud aplikaci zavřete, proces bude přerušen.\n\n"
+                "Opravdu chcete ukončit aplikaci?")
+            msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            msg.button(QMessageBox.StandardButton.Yes).setText("Ano")
+            msg.button(QMessageBox.StandardButton.No).setText("Ne")
+            reply = msg.exec()
             return reply == QMessageBox.StandardButton.Yes
         elif is_in_progress:
-            reply = QMessageBox.question(self, "Ukončit aplikaci?", 
-                "Máte rozpracovanou konfiguraci instalátoru. Pokud aplikaci zavřete, veškerá nastavení budou ztracena.\n\n"
-                "Opravdu chcete ukončit aplikaci?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Ukončit aplikaci?")
+            msg.setText("Máte rozpracovanou konfiguraci instalátoru. Pokud aplikaci zavřete, veškerá nastavení budou ztracena.\n\n"
+                "Opravdu chcete ukončit aplikaci?")
+            msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            msg.button(QMessageBox.StandardButton.Yes).setText("Ano")
+            msg.button(QMessageBox.StandardButton.No).setText("Ne")
+            reply = msg.exec()
             return reply == QMessageBox.StandardButton.Yes
         
         return True

@@ -214,13 +214,17 @@ class FinishPage(QWizardPage):
                 if os.path.basename(dir_path).lower() in ["_internal", "lib"]:
                     parent_dir = os.path.dirname(dir_path)
                     if exe_path.startswith(parent_dir):
-                        reply = QMessageBox.question(self, "Nesprávná složka", 
-                            f"Vybrali jste přímo složku '{os.path.basename(dir_path)}'. "
+                        msg = QMessageBox(self)
+                        msg.setWindowTitle("Nesprávná složka")
+                        msg.setText(f"Vybrali jste přímo složku '{os.path.basename(dir_path)}'. "
                             "Pro správnou funkci instalátoru je nutné vybrat celou složku aplikace "
                             "(tu, ve které je váš EXE i složka se závislostmi).\n\n"
-                            "Chcete automaticky nastavit nadřazenou složku?",
-                            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-                        if reply == QMessageBox.StandardButton.Yes and file_page:
+                            "Chcete automaticky nastavit nadřazenou složku?")
+                        msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                        msg.button(QMessageBox.StandardButton.Yes).setText("Ano")
+                        msg.button(QMessageBox.StandardButton.No).setText("Ne")
+                        
+                        if msg.exec() == QMessageBox.StandardButton.Yes and file_page:
                             file_page.dirPathEdit.setText(parent_dir)
                             return False # Necháme uživatele zkontrolovat
                 
@@ -232,23 +236,31 @@ class FinishPage(QWizardPage):
             # Kontrola, zda je EXE přímo v té složce, ne o úroveň hlouběji
             rel_path = os.path.relpath(exe_path, dir_path)
             if os.path.dirname(rel_path) != "":
-                reply = QMessageBox.question(self, "Varování", 
-                    "EXE soubor není přímo ve vybrané složce, ale v její podsložce. "
+                msg = QMessageBox(self)
+                msg.setWindowTitle("Varování")
+                msg.setText("EXE soubor není přímo ve vybrané složce, ale v její podsložce. "
                     "To obvykle vede k chybám při spouštění (nenalezení DLL). "
-                    "Chcete automaticky změnit složku aplikace na tu, kde je EXE?",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-                if reply == QMessageBox.StandardButton.Yes and file_page:
+                    "Chcete automaticky změnit složku aplikace na tu, kde je EXE?")
+                msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                msg.button(QMessageBox.StandardButton.Yes).setText("Ano")
+                msg.button(QMessageBox.StandardButton.No).setText("Ne")
+
+                if msg.exec() == QMessageBox.StandardButton.Yes and file_page:
                     file_page.dirPathEdit.setText(os.path.dirname(exe_path))
                     return False # Necháme uživatele zkontrolovat změnu
         
         # Pokud je to onedir build (existuje _internal u EXE) a uživatel nevybral dirPath
         exe_dir = os.path.dirname(os.path.abspath(data['exePath']))
         if os.path.exists(os.path.join(exe_dir, "_internal")) and not data['dirPath']:
-             reply = QMessageBox.question(self, "Chybějící složka závislostí", 
-                "U vašeho EXE souboru byla nalezena složka '_internal', ale nevybrali jste 'Složku aplikace'. "
-                "Bez ní program po instalaci nebude fungovat. Chcete ji doplnit automaticky?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-             if reply == QMessageBox.StandardButton.Yes and file_page:
+             msg = QMessageBox(self)
+             msg.setWindowTitle("Chybějící složka závislostí")
+             msg.setText("U vašeho EXE souboru byla nalezena složka '_internal', ale nevybrali jste 'Složku aplikace'. "
+                "Bez ní program po instalaci nebude fungovat. Chcete ji doplnit automaticky?")
+             msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+             msg.button(QMessageBox.StandardButton.Yes).setText("Ano")
+             msg.button(QMessageBox.StandardButton.No).setText("Ne")
+             
+             if msg.exec() == QMessageBox.StandardButton.Yes and file_page:
                  file_page.dirPathEdit.setText(exe_dir)
                  return False
 
