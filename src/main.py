@@ -43,6 +43,7 @@ class AccessibleWizard(QWizard):
         
         if is_building:
             msg = QMessageBox(self)
+            msg.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.WindowStaysOnTopHint)
             msg.setWindowTitle("Probíhá sestavování")
             msg.setText("Právě probíhá vytváření instalátoru. Pokud aplikaci zavřete, proces bude přerušen.\n\n"
                 "Opravdu chcete ukončit aplikaci?")
@@ -53,6 +54,7 @@ class AccessibleWizard(QWizard):
             return reply == QMessageBox.StandardButton.Yes
         elif is_in_progress:
             msg = QMessageBox(self)
+            msg.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.WindowStaysOnTopHint)
             msg.setWindowTitle("Ukončit aplikaci?")
             msg.setText("Máte rozpracovanou konfiguraci instalátoru. Pokud aplikaci zavřete, veškerá nastavení budou ztracena.\n\n"
                 "Opravdu chcete ukončit aplikaci?")

@@ -215,6 +215,7 @@ class FinishPage(QWizardPage):
                     parent_dir = os.path.dirname(dir_path)
                     if exe_path.startswith(parent_dir):
                         msg = QMessageBox(self)
+                        msg.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.WindowStaysOnTopHint)
                         msg.setWindowTitle("Nesprávná složka")
                         msg.setText(f"Vybrali jste přímo složku '{os.path.basename(dir_path)}'. "
                             "Pro správnou funkci instalátoru je nutné vybrat celou složku aplikace "
@@ -237,6 +238,7 @@ class FinishPage(QWizardPage):
             rel_path = os.path.relpath(exe_path, dir_path)
             if os.path.dirname(rel_path) != "":
                 msg = QMessageBox(self)
+                msg.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.WindowStaysOnTopHint)
                 msg.setWindowTitle("Varování")
                 msg.setText("EXE soubor není přímo ve vybrané složce, ale v její podsložce. "
                     "To obvykle vede k chybám při spouštění (nenalezení DLL). "
@@ -253,6 +255,7 @@ class FinishPage(QWizardPage):
         exe_dir = os.path.dirname(os.path.abspath(data['exePath']))
         if os.path.exists(os.path.join(exe_dir, "_internal")) and not data['dirPath']:
              msg = QMessageBox(self)
+             msg.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.WindowStaysOnTopHint)
              msg.setWindowTitle("Chybějící složka závislostí")
              msg.setText("U vašeho EXE souboru byla nalezena složka '_internal', ale nevybrali jste 'Složku aplikace'. "
                 "Bez ní program po instalaci nebude fungovat. Chcete ji doplnit automaticky?")

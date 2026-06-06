@@ -22,8 +22,15 @@ class InstallationThread(QThread):
     def create_shortcut(self, target_path, shortcut_path):
         """Vytvoří zástupce pomocí PowerShellu."""
         try:
+            # Použijeme absolutní cestu k powershellu pro vyšší spolehlivost
+            ps_path = os.path.join(os.environ['SystemRoot'], 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
             ps_script = f'$s = (New-Object -ComObject WScript.Shell).CreateShortcut("{shortcut_path}"); $s.TargetPath = "{target_path}"; $s.WorkingDirectory = "{os.path.dirname(target_path)}"; $s.Save()'
-            subprocess.run(["powershell", "-Command", ps_script], check=True, capture_output=True)
+            
+            # Přidáme parametry -NoProfile a -NonInteractive pro čistší běh
+            result = subprocess.run([ps_path, "-NoProfile", "-NonInteractive", "-Command", ps_script], capture_output=True, text=True)
+            
+            if result.returncode != 0:
+                raise Exception(f"PowerShell error: {result.stderr}")
             return True
         except Exception as e:
             print(f"Chyba při vytváření zástupce: {e}")
