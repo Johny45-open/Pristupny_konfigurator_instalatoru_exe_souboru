@@ -24,7 +24,11 @@ def build_installer(data, output_exe_path):
     with tempfile.TemporaryDirectory() as tmpdir:
         # --- KROK 1: Sestavení odinstalátoru (Uninstaller) ---
         uninst_tmp = os.path.join(tmpdir, "uninst_build")
-        uninst_stub = os.path.join(os.path.dirname(__file__), "..", "uninstaller_stub")
+        
+        # Oprava cesty: použijeme absolutní cestu k adresáři, kde leží exe_builder.py, a pak se posuneme nahoru
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        uninst_stub = os.path.join(current_dir, "..", "uninstaller_stub")
+        
         shutil.copytree(uninst_stub, uninst_tmp)
         
         # Pro odinstalátor nepotřebujeme payload, config si najde v cílové složce
