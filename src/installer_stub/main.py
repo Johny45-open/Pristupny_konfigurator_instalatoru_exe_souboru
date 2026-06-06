@@ -20,23 +20,21 @@ class InstallationThread(QThread):
         self.config = config
 
     def create_shortcut(self, target_path, shortcut_path):
-        """Vytvoří zástupce pomocí PowerShellu."""
+        """Vytvoří zástupce pomocí PowerShellu a vrátí chybu, pokud selže."""
         try:
-            # Použijeme absolutní cestu k powershellu pro vyšší spolehlivost
             ps_path = os.path.join(os.environ['SystemRoot'], 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
             ps_script = f'$s = (New-Object -ComObject WScript.Shell).CreateShortcut("{shortcut_path}"); $s.TargetPath = "{target_path}"; $s.WorkingDirectory = "{os.path.dirname(target_path)}"; $s.Save()'
             
-            # Přidáme parametry -NoProfile a -NonInteractive pro čistší běh
             result = subprocess.run([ps_path, "-NoProfile", "-NonInteractive", "-Command", ps_script], capture_output=True, text=True)
             
             if result.returncode != 0:
-                raise Exception(f"PowerShell error: {result.stderr}")
-            return True
+                return f"PowerShell error: {result.stderr}"
+            return None
         except Exception as e:
-            print(f"Chyba při vytváření zástupce: {e}")
-            return False
+            return str(e)
 
     def run(self):
+        errors = []
         try:
             if not os.path.exists(self.dest_dir):
                 os.makedirs(self.dest_dir)
@@ -75,13 +73,15 @@ class InstallationThread(QThread):
                 self.status.emit("Vytvářím zástupce na ploše...")
                 desktop = os.path.join(os.environ['USERPROFILE'], 'Desktop')
                 shortcut_path = os.path.join(desktop, f"{app_name}.lnk")
-                self.create_shortcut(target_exe, shortcut_path)
+                err = self.create_shortcut(target_exe, shortcut_path)
+                if err: errors.append(f"Zástupce na ploše: {err}")
 
             if self.config.get('createStartMenuShortcut'):
                 self.status.emit("Vytvářím zástupce v nabídce Start...")
                 start_menu = os.path.join(os.environ['APPDATA'], 'Microsoft', 'Windows', 'Start Menu', 'Programs')
                 shortcut_path = os.path.join(start_menu, f"{app_name}.lnk")
-                self.create_shortcut(target_exe, shortcut_path)
+                err = self.create_shortcut(target_exe, shortcut_path)
+                if err: errors.append(f"Zástupce v nabídce Start: {err}")
             
             self.progress.emit(100)
             
@@ -89,7 +89,12 @@ class InstallationThread(QThread):
             config_for_uninstaller = os.path.join(self.dest_dir, "install_config.json")
             with open(config_for_uninstaller, "w", encoding="utf-8") as f:
                 json.dump(self.config, f, ensure_ascii=False, indent=4)
-            self.finished_signal.emit(True, "Instalace byla úspěšně dokončena.")
+            
+            msg = "Instalace byla úspěšně dokončena."
+            if errors:
+                msg += "\n\nVarování: Některé zástupce se nepodařilo vytvořit:\n" + "\n".join(errors)
+            
+            self.finished_signal.emit(True, msg)
         except Exception as e:
             self.finished_signal.emit(False, str(e))
 
