@@ -35,12 +35,12 @@ def build_installer(data, output_exe_path):
         # --- KROK 1: Sestavení odinstalátoru (Uninstaller) ---
         uninst_tmp = os.path.join(tmpdir, "uninst_build")
 
-        # Oprava cesty pomocí nové helper funkce
-        uninst_stub = get_resource_path("../uninstaller_stub")
+        # Oprava cesty: použijeme absolutní cestu ke složce pomocí get_resource_path
+        uninst_stub = get_resource_path("uninstaller_stub")
 
         shutil.copytree(uninst_stub, uninst_tmp)
 
-        # ... (zbytek funkce zůstává stejný)
+        # Pro odinstalátor nepotřebujeme payload, config si najde v cílové složce
         uninst_cmd = [
             "pyinstaller", "--onefile", "--windowed", "--uac-admin",
             f"--name=uninstall", "--clean", "main.py"
@@ -49,7 +49,7 @@ def build_installer(data, output_exe_path):
         uninstall_exe_path = os.path.join(uninst_tmp, "dist", "uninstall.exe")
 
         # --- KROK 2: Příprava hlavního instalátoru (Setup) ---
-        stub_dir = get_resource_path("../installer_stub")
+        stub_dir = get_resource_path("installer_stub")
         shutil.copytree(stub_dir, tmpdir, dirs_exist_ok=True)
         # ... (zbytek zůstává)**
         # Vytvoření config.json
