@@ -1,11 +1,20 @@
 import sys
 from PyQt6.QtWidgets import QApplication, QWizard, QMessageBox
+from PyQt6.QtCore import Qt
 from ui.wizard_pages import IntroPage, AppInfoPage, FileSelectionPage, InstallationSettingsPage, FinishPage
+
+try:
+    from version import __version__
+except ImportError:
+    try:
+        from src.version import __version__
+    except ImportError:
+        __version__ = "0.0.0-dev"
 
 class AccessibleWizard(QWizard):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Přístupný konfigurátor instalátorů - Wizard")
+        self.setWindowTitle(f"Přístupný konfigurátor instalátorů v{__version__} - Wizard")
         
         # Použijeme nativní styl systému
         self.setWizardStyle(QWizard.WizardStyle.ModernStyle)
@@ -15,6 +24,37 @@ class AccessibleWizard(QWizard):
         self.setButtonText(QWizard.WizardButton.BackButton, "< Zpět")
         self.setButtonText(QWizard.WizardButton.CancelButton, "Zrušit")
         self.setButtonText(QWizard.WizardButton.FinishButton, "Dokončit")
+
+        # Tlačítko "O aplikaci" viditelné na všech stránkách (HelpButton)
+        self.setOption(QWizard.WizardOption.HaveHelpButton, True)
+        self.setButtonText(QWizard.WizardButton.HelpButton, "O aplikaci")
+        self.helpRequested.connect(self.show_about)
+
+    def show_about(self):
+        """Zobrazí dialog O aplikaci s verzí konfigurátoru a balené aplikace."""
+        # Verze balené aplikace je v poli wizardu (AppInfoPage), pokud je vyplněna
+        try:
+            app_version = self.field("appVersion")
+        except Exception:
+            app_version = ""
+        if not app_version:
+            app_version = "— (nezadáno, výchozí 1.0.0)"
+
+        msg = QMessageBox(self)
+        msg.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.WindowStaysOnTopHint)
+        msg.setWindowTitle("O aplikaci")
+        msg.setText(
+            f"Přístupný konfigurátor instalátorů\n\n"
+            f"Verze konfigurátoru: {__version__}\n"
+            f"Verze balené aplikace: {app_version}\n\n"
+            f"Tento nástroj slouží k vytváření přístupných instalátorů pro Windows.\n"
+            f"Vytvořeno s důrazem na přístupnost bez bariér."
+        )
+        msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+        msg.button(QMessageBox.StandardButton.Ok).setText("OK")
+        # Přístupnost
+        msg.setAccessibleName(f"O aplikaci. Verze konfigurátoru {__version__}. Verze balené aplikace {app_version}")
+        msg.exec()
 
     def closeEvent(self, event):
         if self.can_close():
@@ -69,6 +109,7 @@ class AccessibleWizard(QWizard):
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName("Přístupný konfigurátor instalátorů")
+    app.setApplicationVersion(__version__)
     
     wizard = AccessibleWizard()
     

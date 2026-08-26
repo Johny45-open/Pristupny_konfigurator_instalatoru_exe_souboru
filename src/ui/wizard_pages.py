@@ -5,6 +5,14 @@ import os
 from generator.iss_generator import generate_iss
 from generator.exe_builder import build_installer
 
+try:
+    from version import __version__
+except ImportError:
+    try:
+        from src.version import __version__
+    except ImportError:
+        __version__ = "0.0.0-dev"
+
 class BuildThread(QThread):
     finished_signal = pyqtSignal(bool, str)
 
@@ -36,6 +44,17 @@ class IntroPage(QWizardPage):
         self.label.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.label.setAccessibleName(f"Vítejte. {text}")
         layout.addWidget(self.label)
+
+        # Verze konfigurátoru – odděleně od verze balené aplikace (AppInfoPage)
+        version_text = f"Verze aplikace: v{__version__}"
+        self.versionLabel = QLabel(version_text)
+        self.versionLabel.setWordWrap(True)
+        self.versionLabel.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.versionLabel.setAccessibleName(f"Verze konfigurátoru {__version__}")
+        self.versionLabel.setAccessibleDescription("Verze tohoto konfigurátoru, nikoli verze balené aplikace")
+        self.versionLabel.setStyleSheet("color: palette(mid); font-size: 9pt;")
+        layout.addWidget(self.versionLabel)
+
         self.setLayout(layout)
 
     def initializePage(self):
