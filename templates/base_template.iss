@@ -42,25 +42,34 @@ Source: "{#ExePath}"; DestDir: "{app}"; Flags: ignoreversion
 Filename: "{app}\{#ExeName}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
 
 [Code]
-// Procedura pro vynucení čtení instrukcí při změně stránky
+// Přístupné oznámení při změně stránky – aktualizuje popisky pro čtečku
 procedure CurPageChanged(CurPageID: Integer);
-var
-  InstructionText: String;
 begin
-  case CurPageID of
-    wpSelectDir:
-      InstructionText := 'Zvolte cílové umístění. ' + CustomMessage('SelectDirDesc');
-    wpSelectProgramGroup:
-      InstructionText := 'Zvolte složku v nabídce Start. ' + CustomMessage('SelectProgramGroupDesc');
-    wpSelectTasks:
-      InstructionText := 'Vyberte další úlohy, které mají být provedeny.';
+  try
+    case CurPageID of
+      wpSelectDir:
+        WizardForm.SelectDirLabel.Caption := CustomMessage('SelectDirDesc');
+      wpSelectProgramGroup:
+        WizardForm.SelectStartMenuFolderLabel.Caption := CustomMessage('SelectProgramGroupDesc');
+      wpSelectTasks:
+        WizardForm.TasksLabel.Caption := 'Vyberte další úlohy, které mají být provedeny.';
+    end;
+  except
   end;
 end;
 
-// Funkce pro úpravu popisků za běhu pro lepší přístupnost
+// Nastavení přístupnosti – Hint je jen fallback, hlavní je propojení Label<->Edit přes FocusControl
 procedure InitializeWizard();
 begin
-  // Nastavení AccessibleName pro klíčové prvky, aby čtečka věděla, co edituje
   WizardForm.DirEdit.Hint := 'Zadejte cestu k instalaci';
   WizardForm.GroupEdit.Hint := 'Zadejte název složky v nabídce Start';
+  // Zajisti, že popisky jsou fokusovatelné pro čtečku (FocusControl propojení už existuje v Inno)
+  try
+    WizardForm.DirEdit.AccessibleName := 'Cesta k instalaci';
+  except
+  end;
+  try
+    WizardForm.GroupEdit.AccessibleName := 'Složka v nabídce Start';
+  except
+  end;
 end;

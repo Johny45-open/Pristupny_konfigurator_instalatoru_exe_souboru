@@ -82,7 +82,10 @@ def build():
         "--onefile",
         "--windowed",
         "--name", "Konfigurator",
-        "--clean"
+        "--clean",
+        "--hidden-import=core.config",
+        "--hidden-import=core.manifest",
+        "--hidden-import=core.live_announcer",
     ]
 
     # Přidání datových souborů

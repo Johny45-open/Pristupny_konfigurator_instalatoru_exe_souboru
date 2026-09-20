@@ -1,9 +1,10 @@
-from PyQt6.QtWidgets import (QWizardPage, QVBoxLayout, QLabel, QLineEdit, QFileDialog, 
+from PyQt6.QtWidgets import (QWizardPage, QVBoxLayout, QLabel, QLineEdit, QFileDialog,
                              QPushButton, QHBoxLayout, QComboBox, QMessageBox, QProgressDialog, QApplication, QCheckBox,
-                             QProgressBar)
+                             QProgressBar, QGroupBox, QFormLayout)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QUrl
 from PyQt6.QtGui import QDesktopServices
 import os
+import time
 from generator.iss_generator import generate_iss
 from generator.exe_builder import build_installer
 
@@ -47,7 +48,7 @@ class IntroPage(QWizardPage):
         self.setTitle("Vítejte v konfigurátoru")
         text = "Tento průvodce vám pomůže vytvořit přístupný instalátor pro vaši aplikaci."
         self.setAccessibleName("Úvodní stránka")
-        
+
         layout = QVBoxLayout()
         self.label = QLabel(text)
         self.label.setWordWrap(True)
@@ -75,27 +76,36 @@ class AppInfoPage(QWizardPage):
         super().__init__(parent)
         self.setTitle("Informace o aplikaci")
         self.setAccessibleName("Informace o aplikaci")
-        
-        layout = QVBoxLayout()
-        layout.addWidget(QLabel("Název aplikace:"))
+
+        form = QFormLayout()
+
+        self.appNameLabel = QLabel("Název aplikace:")
         self.appNameEdit = QLineEdit()
+        self.appNameLabel.setBuddy(self.appNameEdit)
         self.appNameEdit.setAccessibleName("Název aplikace, povinné pole")
-        layout.addWidget(self.appNameEdit)
+        self.appNameEdit.setAccessibleDescription("Zadejte název aplikace, jak se zobrazí v instalátoru. Povinné pole.")
+        form.addRow(self.appNameLabel, self.appNameEdit)
         self.registerField("appName*", self.appNameEdit)
 
-        layout.addWidget(QLabel("Autor:"))
+        self.appAuthorLabel = QLabel("Autor:")
         self.appAuthorEdit = QLineEdit()
+        self.appAuthorLabel.setBuddy(self.appAuthorEdit)
         self.appAuthorEdit.setAccessibleName("Autor, nepovinné pole")
-        layout.addWidget(self.appAuthorEdit)
+        self.appAuthorEdit.setAccessibleDescription("Jméno autora nebo firmy. Nepovinné pole, může zůstat prázdné.")
+        form.addRow(self.appAuthorLabel, self.appAuthorEdit)
         self.registerField("appAuthor", self.appAuthorEdit)
 
-        layout.addWidget(QLabel("Verze:"))
+        self.appVersionLabel = QLabel("Verze:")
         self.appVersionEdit = QLineEdit()
         self.appVersionEdit.setText("1.0.0")
+        self.appVersionLabel.setBuddy(self.appVersionEdit)
         self.appVersionEdit.setAccessibleName("Verze, nepovinné pole")
-        layout.addWidget(self.appVersionEdit)
+        self.appVersionEdit.setAccessibleDescription("Verze balené aplikace ve formátu např. 1.0.0. Nepovinné pole, výchozí 1.0.0.")
+        form.addRow(self.appVersionLabel, self.appVersionEdit)
         self.registerField("appVersion", self.appVersionEdit)
 
+        layout = QVBoxLayout()
+        layout.addLayout(form)
         self.setLayout(layout)
 
 class FileSelectionPage(QWizardPage):
@@ -103,32 +113,48 @@ class FileSelectionPage(QWizardPage):
         super().__init__(parent)
         self.setTitle("Výběr souborů")
         self.setAccessibleName("Výběr souborů")
-        
+
         layout = QVBoxLayout()
-        layout.addWidget(QLabel("Cesta k hlavnímu EXE souboru:"))
+
+        self.exeLabel = QLabel("Cesta k hlavnímu EXE souboru:")
+        self.exeLabel.setWordWrap(True)
         exeLayout = QHBoxLayout()
         self.exePathEdit = QLineEdit()
+        self.exeLabel.setBuddy(self.exePathEdit)
         self.exePathEdit.setAccessibleName("Cesta k hlavnímu EXE souboru, povinné pole")
+        self.exePathEdit.setAccessibleDescription("Absolutní cesta k hlavnímu EXE souboru vaší aplikace. Povinné pole.")
         self.exeBrowseBtn = QPushButton("Procházet...")
         self.exeBrowseBtn.setAccessibleName("Procházet a vybrat hlavní EXE soubor")
+        self.exeBrowseBtn.setAccessibleDescription("Otevře dialog pro výběr EXE souboru")
         self.exeBrowseBtn.clicked.connect(self.browseExe)
         exeLayout.addWidget(self.exePathEdit)
         exeLayout.addWidget(self.exeBrowseBtn)
+        layout.addWidget(self.exeLabel)
         layout.addLayout(exeLayout)
         self.registerField("exePath*", self.exePathEdit)
 
         self.dirDescLabel = QLabel("Složka se všemi soubory aplikace (DŮLEŽITÉ: U --onedir vyberte složku, kde je přímo váš EXE a složka _internal):")
         self.dirDescLabel.setWordWrap(True)
+        self.dirDescLabel.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.dirDescLabel.setAccessibleName("Nápověda: složka se všemi soubory aplikace")
+        self.dirDescLabel.setAccessibleDescription("Vyberte složku, kde je váš EXE a případně složka _internal se závislostmi. Nepovinné pokud není potřeba přibalit další soubory.")
         layout.addWidget(self.dirDescLabel)
+
+        self.dirLabel = QLabel("Složka aplikace:")
+        self.dirLabel.setWordWrap(True)
         dirLayout = QHBoxLayout()
         self.dirPathEdit = QLineEdit()
         self.dirPathEdit.setPlaceholderText("Např. C:\\projekty\\moje_aplikace\\dist\\hlavni_program")
+        self.dirLabel.setBuddy(self.dirPathEdit)
         self.dirPathEdit.setAccessibleName("Složka se všemi soubory aplikace, nepovinné pole (pokud není potřeba přibalit další soubory)")
+        self.dirPathEdit.setAccessibleDescription("Cesta ke složce obsahující všechny soubory aplikace. Nepovinné pole.")
         self.dirBrowseBtn = QPushButton("Procházet...")
         self.dirBrowseBtn.setAccessibleName("Procházet a vybrat složku aplikace")
+        self.dirBrowseBtn.setAccessibleDescription("Otevře dialog pro výběr složky aplikace")
         self.dirBrowseBtn.clicked.connect(self.browseDir)
         dirLayout.addWidget(self.dirPathEdit)
         dirLayout.addWidget(self.dirBrowseBtn)
+        layout.addWidget(self.dirLabel)
         layout.addLayout(dirLayout)
         self.registerField("dirPath", self.dirPathEdit)
 
@@ -143,7 +169,7 @@ class FileSelectionPage(QWizardPage):
             if os.path.exists(os.path.join(exe_dir, "_internal")) or os.path.exists(os.path.join(exe_dir, "lib")):
                 if not self.dirPathEdit.text():
                     self.dirPathEdit.setText(exe_dir)
-                    QMessageBox.information(self, "Detekována složka aplikace", 
+                    QMessageBox.information(self, "Detekována složka aplikace",
                         "V blízkosti EXE souboru byla nalezena složka se závislostmi (_internal nebo lib). "
                         "Automaticky jsem ji nastavil jako složku aplikace.")
 
@@ -157,30 +183,93 @@ class InstallationSettingsPage(QWizardPage):
         super().__init__(parent)
         self.setTitle("Nastavení instalace")
         self.setAccessibleName("Nastavení instalace")
-        
+
         layout = QVBoxLayout()
-        layout.addWidget(QLabel("Výchozí umístění instalace:"))
+        self.installDirLabel = QLabel("Výchozí umístění instalace:")
         self.installDirCombo = QComboBox()
         self.installDirCombo.addItems(["Program Files (64-bit)", "Program Files (32-bit/x86)"])
+        self.installDirLabel.setBuddy(self.installDirCombo)
         self.installDirCombo.setAccessibleName("Výchozí umístění")
+        self.installDirCombo.setAccessibleDescription("Vyberte výchozí cílovou složku instalace: Program Files 64-bit nebo 32-bit.")
+        layout.addWidget(self.installDirLabel)
         layout.addWidget(self.installDirCombo)
         self.registerField("installDir", self.installDirCombo)
 
         layout.addSpacing(20)
-        
+
+        group = QGroupBox("Zástupci")
+        group.setAccessibleName("Zástupci")
+        group.setAccessibleDescription("Nastavení vytváření zástupců na ploše a v nabídce Start")
+        groupLayout = QVBoxLayout()
+
         self.createDesktopShortcut = QCheckBox("Vytvořit zástupce na ploše")
         self.createDesktopShortcut.setAccessibleName("Vytvořit zástupce na ploše")
+        self.createDesktopShortcut.setAccessibleDescription("Zaškrtněte pro vytvoření zástupce na pracovní ploše")
         self.createDesktopShortcut.setChecked(True)
-        layout.addWidget(self.createDesktopShortcut)
+        groupLayout.addWidget(self.createDesktopShortcut)
         self.registerField("createDesktopShortcut", self.createDesktopShortcut)
 
         self.createStartMenuShortcut = QCheckBox("Vytvořit zástupce v nabídce Start")
         self.createStartMenuShortcut.setAccessibleName("Vytvořit zástupce v nabídce Start")
+        self.createStartMenuShortcut.setAccessibleDescription("Zaškrtněte pro vytvoření zástupce v nabídce Start")
         self.createStartMenuShortcut.setChecked(True)
-        layout.addWidget(self.createStartMenuShortcut)
+        groupLayout.addWidget(self.createStartMenuShortcut)
         self.registerField("createStartMenuShortcut", self.createStartMenuShortcut)
 
+        group.setLayout(groupLayout)
+        layout.addWidget(group)
+
         self.setLayout(layout)
+
+class SummaryPage(QWizardPage):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setTitle("Shrnutí")
+        self.setSubTitle("Zkontrolujte zadané hodnoty před sestavením instalátoru")
+        self.setAccessibleName("Shrnutí nastavení")
+        self.setAccessibleDescription("Přehled všech zadaných hodnot před sestavením instalátoru")
+
+        layout = QVBoxLayout()
+        self.summaryLabel = QLabel("")
+        self.summaryLabel.setWordWrap(True)
+        self.summaryLabel.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.summaryLabel.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse | Qt.TextInteractionFlag.TextSelectableByKeyboard)
+        self.summaryLabel.setAccessibleName("Shrnutí zadaných hodnot")
+        self.summaryLabel.setAccessibleDescription("Textové shrnutí: název, verze, autor, cesty a nastavení zástupců")
+        layout.addWidget(self.summaryLabel)
+        self.setLayout(layout)
+
+    def initializePage(self):
+        appName = self.field("appName")
+        appVersion = self.field("appVersion") or "1.0.0"
+        appAuthor = self.field("appAuthor") or "—"
+        exePath = self.field("exePath")
+        dirPath = self.field("dirPath") or "— (není zadána, pouze EXE)"
+        installDirIndex = self.field("installDir")
+        # QComboBox registerField vrací index nebo text podle registrace; ošetříme obojí
+        if isinstance(installDirIndex, int):
+            installDir = "Program Files (64-bit)" if installDirIndex == 0 else "Program Files (32-bit/x86)"
+        else:
+            installDir = str(installDirIndex) if installDirIndex else "Program Files (64-bit)"
+        createDesktop = self.field("createDesktopShortcut")
+        createStart = self.field("createStartMenuShortcut")
+        # bool nebo int
+        desktopText = "Ano" if createDesktop else "Ne"
+        startText = "Ano" if createStart else "Ne"
+
+        text = (
+            f"Název aplikace: {appName}\n"
+            f"Verze: {appVersion}\n"
+            f"Autor: {appAuthor}\n"
+            f"EXE soubor: {exePath}\n"
+            f"Složka aplikace: {dirPath}\n"
+            f"Cíl instalace: {installDir}\n"
+            f"Zástupce na ploše: {desktopText}\n"
+            f"Zástupce v nabídce Start: {startText}"
+        )
+        self.summaryLabel.setText(text)
+        self.summaryLabel.setAccessibleName(text)
+        self.summaryLabel.setFocus()
 
 class FinishPage(QWizardPage):
     def __init__(self, parent=None):
@@ -188,25 +277,40 @@ class FinishPage(QWizardPage):
         self.setTitle("Dokončení")
         desc = "Nyní si můžete vybrat, zda chcete vygenerovat pouze Inno Setup skript, nebo přímo vytvořit hotový EXE instalátor."
         self.setAccessibleName("Dokončení")
+        self.setAccessibleDescription(desc)
         self.is_building = False
         self.is_finished = False
         self._output_path = ""
         self.progress_dialog = None
         self.build_thread = None
-        
+        self._last_announce_time = 0.0
+
         layout = QVBoxLayout()
         self.label = QLabel(desc)
         self.label.setWordWrap(True)
         self.label.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.label.setAccessibleName(desc)
+        self.label.setAccessibleDescription("Volby pro generování skriptu nebo přímé sestavení instalátoru")
         layout.addWidget(self.label)
+
+        # live region pro throttled oznámení (1.2s)
+        self.liveLabel = QLabel("")
+        self.liveLabel.setAccessibleName("Živá oznámení průběhu")
+        self.liveLabel.setAccessibleDescription("Průběžná oznámení pro čtečku obrazovky, throttling 1.2s")
+        self.liveLabel.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        # skrytý vizuálně ale přístupný pro QAccessible
+        self.liveLabel.hide()
+        layout.addWidget(self.liveLabel)
 
         self.btnIss = QPushButton("Generovat .iss skript")
         self.btnIss.setAccessibleName("Generovat ISS skript Inno Setup")
+        self.btnIss.setAccessibleDescription("Vygeneruje Inno Setup skript .iss pro pozdější kompilaci")
         self.btnIss.clicked.connect(self.handle_iss)
         layout.addWidget(self.btnIss)
 
         self.btnExe = QPushButton("Vytvořit přímo EXE instalátor")
         self.btnExe.setAccessibleName("Vytvořit EXE instalátor přímo")
+        self.btnExe.setAccessibleDescription("Přímo sestaví hotový EXE instalátor, může trvat až minutu")
         self.btnExe.clicked.connect(self.handle_exe)
         layout.addWidget(self.btnExe)
 
@@ -215,6 +319,7 @@ class FinishPage(QWizardPage):
         self.statusLabel.setWordWrap(True)
         self.statusLabel.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.statusLabel.setAccessibleName("Stav sestavování")
+        self.statusLabel.setAccessibleDescription("Aktuální stav sestavování instalátoru")
         self.statusLabel.hide()
         layout.addWidget(self.statusLabel)
 
@@ -222,6 +327,7 @@ class FinishPage(QWizardPage):
         self.progressBar.setRange(0, 100)
         self.progressBar.setValue(0)
         self.progressBar.setAccessibleName("Průběh sestavování v procentech")
+        self.progressBar.setAccessibleDescription("Ukazatel průběhu sestavování 0 až 100 procent")
         self.progressBar.setTextVisible(True)
         self.progressBar.hide()
         layout.addWidget(self.progressBar)
@@ -230,11 +336,14 @@ class FinishPage(QWizardPage):
         self.resultLabel.setWordWrap(True)
         self.resultLabel.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse | Qt.TextInteractionFlag.TextSelectableByKeyboard)
         self.resultLabel.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.resultLabel.setAccessibleName("Výsledek sestavování")
+        self.resultLabel.setAccessibleDescription("Cesta k úspěšně vytvořenému souboru")
         self.resultLabel.hide()
         layout.addWidget(self.resultLabel)
 
         self.btnOpenFolder = QPushButton("Otevřít složku s instalátorem")
         self.btnOpenFolder.setAccessibleName("Otevřít složku s vytvořeným instalátorem")
+        self.btnOpenFolder.setAccessibleDescription("Otevře složku obsahující vygenerovaný instalátor ve správci souborů")
         self.btnOpenFolder.clicked.connect(self.open_output_folder)
         self.btnOpenFolder.hide()
         layout.addWidget(self.btnOpenFolder)
@@ -243,6 +352,22 @@ class FinishPage(QWizardPage):
 
     def initializePage(self):
         self.label.setFocus()
+
+    def _announce(self, text):
+        # throttling 1.2s aby NVDA nebyl zahlcen
+        now = time.monotonic()
+        if now - self._last_announce_time < 1.2:
+            return
+        self._last_announce_time = now
+        try:
+            self.liveLabel.setText(text)
+            self.liveLabel.setAccessibleName(text)
+            self.liveLabel.setAccessibleDescription(text)
+            from PyQt6.QtGui import QAccessible
+            QAccessible.updateAccessibility(self.liveLabel, 0, QAccessible.Event.Alert)
+            QAccessible.updateAccessibility(self.liveLabel, 0, QAccessible.Event.ValueChanged)
+        except Exception:
+            pass
 
     def get_data(self):
         return {
@@ -358,6 +483,7 @@ class FinishPage(QWizardPage):
         self._output_path = file_path
         self.resultLabel.setText(f"Skript byl úspěšně vygenerován:\n{file_path}")
         self.resultLabel.setAccessibleName(f"Skript byl úspěšně vygenerován: {file_path}")
+        self.resultLabel.setAccessibleDescription(f"Cesta ke skriptu: {file_path}")
         self.resultLabel.show()
         self.btnOpenFolder.show()
         self.resultLabel.setFocus()
@@ -382,6 +508,7 @@ class FinishPage(QWizardPage):
             # Inline progress - přežije GC, viditelný i pro čtečku
             self.statusLabel.setText("Sestavuji instalátor, prosím čekejte... Krok 1/3: Sestavuji odinstalátor...")
             self.statusLabel.setAccessibleName("Sestavuji instalátor, prosím čekejte. Krok 1 ze 3: Sestavuji odinstalátor")
+            self.statusLabel.setAccessibleDescription("Probíhá krok 1 ze 3: sestavování odinstalátoru")
             self.statusLabel.show()
             self.statusLabel.setFocus()
             self.progressBar.setRange(0, 100)
@@ -395,6 +522,7 @@ class FinishPage(QWizardPage):
             self.progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
             self.progress_dialog.setWindowFlags(Qt.WindowType.CustomizeWindowHint | Qt.WindowType.WindowTitleHint)
             self.progress_dialog.setAccessibleName("Okénko průběhu sestavování")
+            self.progress_dialog.setAccessibleDescription("Průběh sestavování instalátoru")
             self.progress_dialog.setMinimumDuration(0)
             self.progress_dialog.setRange(0, 0)  # neurčitý dokud nepřijdou procenta
             self.progress_dialog.show()
@@ -413,8 +541,10 @@ class FinishPage(QWizardPage):
     def on_build_status(self, text):
         self.statusLabel.setText(text)
         self.statusLabel.setAccessibleName(text)
+        self.statusLabel.setAccessibleDescription(text)
         if self.progress_dialog:
             self.progress_dialog.setLabelText(text)
+        self._announce(text)
 
     def on_build_progress(self, percent):
         try:
@@ -451,11 +581,18 @@ class FinishPage(QWizardPage):
             self.is_finished = True
             self.progressBar.setValue(100)
             self._output_path = message  # message je cesta u úspěchu
+            self.statusLabel.setText("Instalátor byl úspěšně vytvořen.")
+            self.statusLabel.setAccessibleName(f"Instalátor byl úspěšně vytvořen: {message}")
+            self.statusLabel.setAccessibleDescription(f"Instalátor byl úspěšně vytvořen: {message}")
+            self.statusLabel.show()
+            self._announce(f"Instalátor byl úspěšně vytvořen: {message}")
         else:
             self.progressBar.hide()
             self.statusLabel.setText(f"Chyba: {message}")
             self.statusLabel.setAccessibleName(f"Chyba při sestavování: {message}")
+            self.statusLabel.setAccessibleDescription(f"Chyba při sestavování: {message}")
             self.statusLabel.show()
+            self._announce(f"Chyba při sestavování: {message}")
         # Mírné zpoždění (200ms) umožní NVDA dokončit hlášení o návratu fokusu 
         # a čistě přejít na nové hlášení o úspěchu/chybě.
         QTimer.singleShot(200, lambda s=success, m=message: self.show_result(s, m))
@@ -465,9 +602,11 @@ class FinishPage(QWizardPage):
             file_path = message
             self.statusLabel.setText("Instalátor byl úspěšně vytvořen.")
             self.statusLabel.setAccessibleName(f"Instalátor byl úspěšně vytvořen: {file_path}")
+            self.statusLabel.setAccessibleDescription(f"Instalátor byl úspěšně vytvořen: {file_path}")
             self.statusLabel.show()
             self.resultLabel.setText(f"Uloženo:\n{file_path}")
             self.resultLabel.setAccessibleName(f"Uloženo: {file_path}")
+            self.resultLabel.setAccessibleDescription(f"Cesta k instalátoru: {file_path}")
             self.resultLabel.show()
             self.btnOpenFolder.show()
             self.resultLabel.setFocus()
@@ -481,6 +620,7 @@ class FinishPage(QWizardPage):
             msg.setDefaultButton(QMessageBox.StandardButton.Ok)
             # Přístupnost
             msg.setAccessibleName(f"Instalátor byl úspěšně vytvořen: {file_path}")
+            msg.setAccessibleDescription(f"Cesta: {file_path}")
             msg.exec()
             if msg.clickedButton() == open_btn:
                 self.open_output_folder()

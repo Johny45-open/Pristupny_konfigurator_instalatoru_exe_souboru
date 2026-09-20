@@ -1,0 +1,138 @@
+[project]
+name = "pristupny-konfigurator-instalatoru"
+dynamic = ["version"]
+description = "Přístupný konfigurátor a generátor Windows instalátorů — accessibility-first (NVDA, klávesnice, PyQt6)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+    { name = "Johny45-open", email = "kalivoda.honza@gmail.com" },
+]
+keywords = ["installer", "pyqt6", "accessibility", "nvda", "inno-setup", "pyinstaller", "windows"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Win32 (MS Windows)",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Build Tools",
+    "Topic :: System :: Software Distribution",
+    "Accessibility",
+]
+dependencies = [
+    # runtime — konfigurátor + výsledný instalátor běží na PyQt6
+    "PyQt6>=6.6",
+]
+
+[project.optional-dependencies]
+# build = sestavení EXE (PyInstaller) + Inno Setup skripty
+build = [
+    "pyinstaller>=6.0",
+]
+# dev = lint, test, type-check
+dev = [
+    "pyinstaller>=6.0",
+    "pytest>=8.0",
+    "pytest-qt>=4.4",
+    "ruff>=0.8",
+    "black>=24.0",
+    "mypy>=1.10",
+    "types-pyinstaller; python_version >= '3.10'",
+]
+# všechno pro CI
+all = [
+    "pristupny-konfigurator-instalatoru[build,dev]",
+]
+
+[project.urls]
+Homepage = "https://github.com/Johny45-open/Pristupny_konfigurator_instalatoru_exe_souboru"
+Repository = "https://github.com/Johny45-open/Pristupny_konfigurator_instalatoru_exe_souboru"
+Issues = "https://github.com/Johny45-open/Pristupny_konfigurator_instalatoru_exe_souboru/issues"
+
+# Spuštění bez instalace zůstává:  python src/main.py
+# Po `pip install -e .` lze volat i jako modul:
+#   python -m src.main
+# Entry-point se přidá až po přejmenování src/ na balíček (viz komentář níže).
+# [project.scripts]
+# pristupny-konfigurator = "src.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+# Jediný zdroj pravdy je soubor VERSION v kořeni repa (čte i src/version.py a build.py)
+# Hatch ho čte při `pip install` / `hatch version`
+path = "VERSION"
+
+[tool.hatch.build.targets.wheel]
+# Aplikace není knihovna — nemá importovatelný top-level balíček pro `pip install`.
+# `src/` je aplikační adresář (core, generator, ui, installer_stub, ...), ne pip balíček.
+# Proto wheel je záměrně prázdný; pyproject slouží pro závislosti a tooling.
+# Až bude chtít repo být `pip install`-ovatelný, přesuň kód do src/pristupny_konfigurator/
+# a nastav: packages = ["src/pristupny_konfigurator"]
+packages = []
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/templates",
+    "/VERSION",
+    "/README.md",
+    "/build.py",
+]
+
+# ---------------------------------------------------------------------------
+# Tooling — sjednocuje formátování, lint a testy (nahrazuje roztroušené .ini)
+# ---------------------------------------------------------------------------
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+# pravidla: pycodestyle, pyflakes, isort, bugbear, pyupgrade, ruff
+lint.select = ["E", "F", "I", "B", "UP", "W", "C4", "SIM"]
+lint.ignore = ["E501"]  # line-length řeší black
+lint.isort.known-first-party = ["core", "generator", "ui", "installer_stub", "uninstaller_stub", "version"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.black]
+target-version = ["py310"]
+line-length = 100
+include = '\.pyi?$'
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+# PyQt6 stuby jsou neúplné — ignoruj
+[[tool.mypy.overrides]]
+module = "PyQt6.*"
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "."]
+addopts = "-ra -q --strict-markers"
+markers = [
+    "slow: pomalé / integrační testy (PyInstaller)",
+    "gui: testy vyžadující QApplication (offscreen)",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
+
+[tool.coverage.run]
+source = ["src"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false

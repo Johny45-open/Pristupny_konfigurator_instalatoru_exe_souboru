@@ -3,11 +3,60 @@ import os
 import shutil
 import json
 import subprocess
-from PyQt6.QtWidgets import (QApplication, QWizard, QWizardPage, QVBoxLayout, 
-                             QLabel, QLineEdit, QPushButton, QHBoxLayout, 
+import time
+from enum import Enum
+from datetime import datetime, timezone
+from PyQt6.QtWidgets import (QApplication, QWizard, QWizardPage, QVBoxLayout,
+                             QLabel, QLineEdit, QPushButton, QHBoxLayout,
                              QProgressBar, QMessageBox, QCheckBox)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtGui import QAccessible
 
+MANIFEST_FILENAME = "install_manifest.json"
+CONFIG_FILENAME = "install_config.json"
+
+PROTECTED_DIRS = [
+    os.path.abspath(os.environ.get("SystemRoot", r"C:\Windows")),
+    os.path.abspath(os.environ.get("SystemRoot", r"C:\Windows") + r"\System32"),
+    os.path.abspath("C:\\"),
+    os.path.abspath("C:/"),
+]
+
+class InstallStatus(Enum):
+    SUCCESS = "success"
+    PARTIAL = "partial"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+def is_protected_dir(path: str) -> bool:
+    """Vrátí True pokud je cesta chráněná (kořen, Windows)."""
+    try:
+        p = os.path.abspath(path).rstrip(os.sep).lower()
+        for prot in PROTECTED_DIRS:
+            pp = os.path.abspath(prot).rstrip(os.sep).lower()
+            if p == pp:
+                return True
+        if len(p) <= 3:
+            return True
+    except Exception:
+        return True
+    return False
+
+def write_manifest(manifest_data: dict, dest_dir: str) -> str:
+    """Zapíše manifest do dest_dir/MANIFEST_FILENAME."""
+    os.makedirs(dest_dir, exist_ok=True)
+    path = os.path.join(dest_dir, MANIFEST_FILENAME)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(manifest_data, f, ensure_ascii=False, indent=2)
+    return path
+
+def write_config(config: dict, dest_dir: str) -> str:
+    """Zapíše config do dest_dir/CONFIG_FILENAME."""
+    os.makedirs(dest_dir, exist_ok=True)
+    path = os.path.join(dest_dir, CONFIG_FILENAME)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(config, f, ensure_ascii=False, indent=4)
+    return path
 
 def get_powershell_path():
     """Vrátí cestu k powershell.exe, řeší SysNative pro 32-bit proces na 64-bit OS."""
@@ -34,7 +83,7 @@ def get_known_folder(folder_id):
         'programs': 'Programs',
         'commonprograms': 'CommonPrograms',
         'startmenu': 'StartMenu',
-        'appdata_programs': 'Programs',  # alias
+        'appdata_programs': 'Programs',
     }
     net_name = mapping.get(folder_id.lower(), folder_id)
     try:
@@ -48,13 +97,11 @@ def get_known_folder(folder_id):
             p = result.stdout.strip()
             if p and os.path.isdir(p):
                 return p
-            # PowerShell může vrátit cestu i když adresář neexistuje (např. čerstvý profil) – vrať i tak
             if p:
                 return p
     except Exception:
         pass
 
-    # Fallback – registry User Shell Folders pro Desktop
     if folder_id.lower() == 'desktop':
         try:
             import winreg
@@ -65,7 +112,6 @@ def get_known_folder(folder_id):
                     return exp
         except Exception:
             pass
-        # Poslední fallback – zkus Plocha i Desktop
         for name in ['Desktop', 'Plocha']:
             p = os.path.join(os.environ.get('USERPROFILE', ''), name)
             if os.path.isdir(p):
@@ -73,8 +119,6 @@ def get_known_folder(folder_id):
         return os.path.join(os.environ.get('USERPROFILE', ''), 'Desktop')
 
     if folder_id.lower() in ('programs', 'startmenu', 'commonprograms'):
-        base = os.environ.get('APPDATA', '') if folder_id.lower() == 'programs' else os.environ.get('APPDATA', '')
-        # Pro CommonPrograms je base veřejná cesta
         if folder_id.lower() == 'commonprograms':
             base = os.environ.get('PROGRAMDATA', r'C:\ProgramData')
             return os.path.join(base, 'Microsoft', 'Windows', 'Start Menu', 'Programs')
@@ -89,6 +133,7 @@ def get_known_folder(folder_id):
 class InstallationThread(QThread):
     progress = pyqtSignal(int)
     status = pyqtSignal(str)
+    announce = pyqtSignal(str)
     finished_signal = pyqtSignal(bool, str)
 
     def __init__(self, source_dir, dest_dir, config):
@@ -96,23 +141,22 @@ class InstallationThread(QThread):
         self.source_dir = source_dir
         self.dest_dir = dest_dir
         self.config = config
+        self._copied_files = []
+        self._copied_dirs = []
 
     def create_shortcut(self, target_path, shortcut_path):
         """Vytvoří zástupce pomocí PowerShellu a vrátí chybu, pokud selže."""
         try:
-            # Zajisti, že cílový adresář existuje
             parent = os.path.dirname(shortcut_path)
             if parent and not os.path.exists(parent):
                 os.makedirs(parent, exist_ok=True)
 
             ps_path = get_powershell_path()
-            # Escapování pro PowerShell – používáme single-quotes, uvnitř zdvojit '
             def ps_escape(s):
                 return s.replace("'", "''")
             target_esc = ps_escape(target_path)
             shortcut_esc = ps_escape(shortcut_path)
             workdir = ps_escape(os.path.dirname(target_path))
-            # PowerShell script s single-quotes – bezpečné pro cesty s diakritikou i mezerami
             ps_script = f"$s = (New-Object -ComObject WScript.Shell).CreateShortcut('{shortcut_esc}'); $s.TargetPath = '{target_esc}'; $s.WorkingDirectory = '{workdir}'; $s.Save()"
 
             result = subprocess.run([ps_path, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", ps_script], capture_output=True, text=True, timeout=15)
@@ -120,79 +164,222 @@ class InstallationThread(QThread):
             if result.returncode != 0:
                 err = (result.stderr or result.stdout or "").strip()
                 return f"PowerShell error: {err}" if err else f"PowerShell selhal (code {result.returncode})"
-            # Ověř, že soubor opravdu vznikl
             if not os.path.exists(shortcut_path):
                 return "Zástupce nebyl vytvořen (soubor neexistuje po Save())"
             return None
         except Exception as e:
             return str(e)
 
+    def _rollback(self):
+        """Rollback částečné instalace – smaže zkopírované soubory/adresáře."""
+        try:
+            for f in reversed(self._copied_files):
+                try:
+                    fp = os.path.join(self.dest_dir, f)
+                    if os.path.isfile(fp) and not is_protected_dir(os.path.dirname(fp)):
+                        os.remove(fp)
+                except Exception:
+                    pass
+            for d in self._copied_dirs:
+                try:
+                    dp = os.path.join(self.dest_dir, d)
+                    if os.path.isdir(dp) and not is_protected_dir(dp) and not os.listdir(dp):
+                        os.rmdir(dp)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
     def run(self):
         errors = []
+        status_result = InstallStatus.SUCCESS
         try:
-            if not os.path.exists(self.dest_dir):
-                os.makedirs(self.dest_dir)
+            # Kontrola chráněného adresáře
+            if is_protected_dir(self.dest_dir):
+                self.finished_signal.emit(False, f"Cílová cesta je chráněná a nelze do ní instalovat: {self.dest_dir}")
+                return
 
-            files = os.listdir(self.source_dir)
+            if self.isInterruptionRequested():
+                self.finished_signal.emit(False, "Instalace zrušena uživatelem.")
+                return
+
+            if not os.path.exists(self.dest_dir):
+                os.makedirs(self.dest_dir, exist_ok=True)
+
+            # Seznam souborů k instalaci (payload)
+            if not os.path.isdir(self.source_dir):
+                files = []
+            else:
+                files = os.listdir(self.source_dir)
             total = len(files)
 
+            # Pro manifest evidenci
+            manifest_files = []
+            manifest_dirs = []
+            shortcuts_created = []
+
             if total == 0:
-                # Uložíme konfiguraci pro odinstalátor
-                config_for_uninstaller = os.path.join(self.dest_dir, "install_config.json")
-                with open(config_for_uninstaller, "w", encoding="utf-8") as f:
-                    json.dump(self.config, f, ensure_ascii=False, indent=4)
+                # Uložíme konfiguraci pro odinstalátor i při prázdném payloadu
+                write_config(self.config, self.dest_dir)
+                manifest_data = {
+                    "appName": self.config.get("appName", ""),
+                    "safeName": self.config.get("safeName", ""),
+                    "version": self.config.get("appVersion", ""),
+                    "installDir": os.path.abspath(self.dest_dir),
+                    "installedAt": datetime.now(timezone.utc).isoformat(),
+                    "files": [],
+                    "dirs": [],
+                    "shortcuts": [],
+                    "status": InstallStatus.SUCCESS.value
+                }
+                write_manifest(manifest_data, self.dest_dir)
+                self.progress.emit(100)
+                self.announce.emit("Instalace dokončena, žádný payload nebyl nalezen.")
                 self.finished_signal.emit(True, "Instalace byla úspěšně dokončena (nebyl nalezen žádný payload).")
                 return
 
+            # Kopírování 0-80 % s milníky 25/50/75
+            announced_milestones = set()
             for i, f in enumerate(files):
+                if self.isInterruptionRequested():
+                    self.status.emit("Ruší se instalace...")
+                    self.announce.emit("Instalace zrušena uživatelem, probíhá úklid.")
+                    self._rollback()
+                    self.finished_signal.emit(False, "Instalace zrušena uživatelem.")
+                    return
+
                 src = os.path.join(self.source_dir, f)
                 dst = os.path.join(self.dest_dir, f)
                 if os.path.isdir(src):
                     if os.path.exists(dst):
                         shutil.rmtree(dst)
                     shutil.copytree(src, dst)
+                    manifest_dirs.append(f)
+                    self._copied_dirs.append(f)
+                    # Rekurzivně eviduj vnořené soubory pro manifest
+                    for root, dirs, filenames in os.walk(dst):
+                        rel_root = os.path.relpath(root, self.dest_dir)
+                        for fn in filenames:
+                            rel = os.path.join(rel_root, fn) if rel_root != "." else fn
+                            if rel not in manifest_files:
+                                manifest_files.append(rel)
                 else:
                     shutil.copy2(src, dst)
+                    manifest_files.append(f)
+                    self._copied_files.append(f)
 
-                percent = int(((i + 1) / total) * 0.8 * 100) # Kopírování je 80%
+                percent = int(((i + 1) / total) * 80)
                 self.progress.emit(percent)
                 self.status.emit(f"Instaluji: {f}")
 
-            # Vytvoření zástupců
-            exe_name = os.path.basename(self.config.get('exePath', ''))
+                # announce milníky 25/50/75
+                for milestone in (25, 50, 75):
+                    if percent >= milestone and milestone not in announced_milestones:
+                        announced_milestones.add(milestone)
+                        self.announce.emit(f"Instalace {milestone} procent dokončeno")
+
+                # Kontrola protected během kopie (průběžně)
+                if is_protected_dir(self.dest_dir):
+                    self._rollback()
+                    self.finished_signal.emit(False, "Instalace přerušena – cílový adresář je chráněný.")
+                    return
+
+            # Vytváření zástupců 80-95 %
+            exe_name = self.config.get("exeName") or os.path.basename(self.config.get('exePath', ''))
+            if not exe_name:
+                exe_name = self.config.get("safeName", "app") + ".exe"
             target_exe = os.path.join(self.dest_dir, exe_name)
             app_name = self.config.get('appName', 'Aplikace')
+            self.progress.emit(80)
 
             if self.config.get('createDesktopShortcut'):
+                if self.isInterruptionRequested():
+                    self._rollback()
+                    self.finished_signal.emit(False, "Instalace zrušena uživatelem.")
+                    return
                 self.status.emit("Vytvářím zástupce na ploše...")
+                self.announce.emit("Vytvářím zástupce na ploše")
                 desktop = get_known_folder('Desktop')
                 if not desktop or not os.path.isdir(os.path.dirname(desktop)) and not os.path.isdir(desktop):
-                    # Pokud GetFolderPath vrátil neexistující cestu, zkus fallback Plocha/Desktop
                     desktop = get_known_folder('desktop')
                 shortcut_path = os.path.join(desktop, f"{app_name}.lnk")
                 err = self.create_shortcut(target_exe, shortcut_path)
-                if err: errors.append(f"Zástupce na ploše: {err} (cesta: {shortcut_path})")
+                self.progress.emit(88)
+                if err:
+                    errors.append(f"Zástupce na ploše: {err} (cesta: {shortcut_path})")
+                    status_result = InstallStatus.PARTIAL
+                else:
+                    shortcuts_created.append({"path": shortcut_path, "scope": "desktop"})
 
             if self.config.get('createStartMenuShortcut'):
+                if self.isInterruptionRequested():
+                    self._rollback()
+                    self.finished_signal.emit(False, "Instalace zrušena uživatelem.")
+                    return
                 self.status.emit("Vytvářím zástupce v nabídce Start...")
+                self.announce.emit("Vytvářím zástupce v nabídce Start")
                 start_menu = get_known_folder('Programs')
                 shortcut_path = os.path.join(start_menu, f"{app_name}.lnk")
                 err = self.create_shortcut(target_exe, shortcut_path)
-                if err: errors.append(f"Zástupce v nabídce Start: {err} (cesta: {shortcut_path})")
+                self.progress.emit(95)
+                if err:
+                    errors.append(f"Zástupce v nabídce Start: {err} (cesta: {shortcut_path})")
+                    if status_result != InstallStatus.PARTIAL:
+                        status_result = InstallStatus.PARTIAL
+                else:
+                    shortcuts_created.append({"path": shortcut_path, "scope": "startmenu"})
+
+            if not self.config.get('createDesktopShortcut') and not self.config.get('createStartMenuShortcut'):
+                self.progress.emit(95)
+
+            # Zápis manifestu a configu
+            manifest_status = status_result.value if not errors else InstallStatus.PARTIAL.value if status_result == InstallStatus.PARTIAL else InstallStatus.SUCCESS.value
+            if errors and status_result == InstallStatus.SUCCESS:
+                manifest_status = InstallStatus.PARTIAL.value
+
+            manifest_data = {
+                "appName": self.config.get("appName", ""),
+                "safeName": self.config.get("safeName", ""),
+                "version": self.config.get("appVersion", ""),
+                "installDir": os.path.abspath(self.dest_dir),
+                "installedAt": datetime.now(timezone.utc).isoformat(),
+                "files": sorted(manifest_files),
+                "dirs": sorted(manifest_dirs, key=lambda p: p.count(os.sep), reverse=True),
+                "shortcuts": shortcuts_created,
+                "status": manifest_status
+            }
+            write_manifest(manifest_data, self.dest_dir)
+            write_config(self.config, self.dest_dir)
 
             self.progress.emit(100)
-
-            # Uložíme konfiguraci pro odinstalátor (včetně finální volby uživatele)
-            config_for_uninstaller = os.path.join(self.dest_dir, "install_config.json")
-            with open(config_for_uninstaller, "w", encoding="utf-8") as f:
-                json.dump(self.config, f, ensure_ascii=False, indent=4)
+            self.announce.emit("Instalace dokončena na 100 procent")
 
             msg = "Instalace byla úspěšně dokončena."
             if errors:
                 msg += "\n\nVarování: Některé zástupce se nepodařilo vytvořit:\n" + "\n".join(errors)
+                self.finished_signal.emit(True, msg)
+            else:
+                self.finished_signal.emit(True, msg)
 
-            self.finished_signal.emit(True, msg)
         except Exception as e:
+            try:
+                # Zápis failed manifestu pokud možno
+                manifest_data = {
+                    "appName": self.config.get("appName", ""),
+                    "safeName": self.config.get("safeName", ""),
+                    "version": self.config.get("appVersion", ""),
+                    "installDir": os.path.abspath(self.dest_dir),
+                    "installedAt": datetime.now(timezone.utc).isoformat(),
+                    "files": [],
+                    "dirs": [],
+                    "shortcuts": [],
+                    "status": InstallStatus.FAILED.value
+                }
+                write_manifest(manifest_data, self.dest_dir)
+                write_config(self.config, self.dest_dir)
+            except Exception:
+                pass
+            self.announce.emit("Instalace selhala")
             self.finished_signal.emit(False, str(e))
 
 class IntroPage(QWizardPage):
@@ -227,22 +414,52 @@ class DirectoryPage(QWizardPage):
         layout.addWidget(self.label)
 
         self.pathEdit = QLineEdit()
-
-        # Logika pro výběr Program Files na základě konfigurace
         if config.get('installDir', 0) == 0:
             pf = os.environ.get("ProgramW6432") or os.environ.get("ProgramFiles")
         else:
             pf = os.environ.get("ProgramFiles(x86)") or os.environ.get("ProgramFiles")
 
-        # Použijeme safeName (bez diakritiky) pro název složky, aby fungovalo načítání DLL
         folder_name = config.get('safeName', config['appName'])
         default_path = os.path.join(pf, folder_name)
         self.pathEdit.setText(default_path)
         self.pathEdit.setAccessibleName("Cesta k instalaci")
         layout.addWidget(self.pathEdit)
-        self.registerField("installPath", self.pathEdit)
+        self.registerField("installPath*", self.pathEdit)
+
+        self.errorLabel = QLabel("")
+        self.errorLabel.setWordWrap(True)
+        self.errorLabel.setStyleSheet("color: #a00;")
+        self.errorLabel.setAccessibleName("")
+        self.errorLabel.hide()
+        layout.addWidget(self.errorLabel)
 
         self.setLayout(layout)
+
+    def validatePage(self):
+        path = self.pathEdit.text().strip()
+        if not path:
+            self.errorLabel.setText("Cesta nesmí být prázdná.")
+            self.errorLabel.setAccessibleName("Chyba: Cesta nesmí být prázdná.")
+            self.errorLabel.show()
+            return False
+        if is_protected_dir(path):
+            self.errorLabel.setText("Zvolená cesta je chráněná (systémový adresář nebo kořen disku). Zvolte jinou složku.")
+            self.errorLabel.setAccessibleName("Chyba: Zvolená cesta je chráněná.")
+            self.errorLabel.show()
+            return False
+        if not os.path.isabs(path):
+            self.errorLabel.setText("Cesta musí být absolutní (např. C:\\Program Files\\Aplikace).")
+            self.errorLabel.setAccessibleName("Chyba: Cesta musí být absolutní.")
+            self.errorLabel.show()
+            return False
+        # Relativní cesta kontrola – pokud obsahuje ".." nebo je relativní
+        if ".." in path.split(os.sep):
+            self.errorLabel.setText("Cesta nesmí obsahovat '..'.")
+            self.errorLabel.setAccessibleName("Chyba: Cesta nesmí obsahovat '..'.")
+            self.errorLabel.show()
+            return False
+        self.errorLabel.hide()
+        return True
 
     def initializePage(self):
         self.label.setFocus()
@@ -277,7 +494,6 @@ class ShortcutSelectionPage(QWizardPage):
         layout.addWidget(self.startMenuCheck)
         self.registerField("createStartMenuShortcut", self.startMenuCheck)
 
-        # Nápověda pro čtečku
         hint = QLabel("Použijte Tab pro přesun mezi zaškrtávátky a Mezerník pro přepnutí.")
         hint.setWordWrap(True)
         layout.addWidget(hint)
@@ -285,8 +501,64 @@ class ShortcutSelectionPage(QWizardPage):
         self.setLayout(layout)
 
     def initializePage(self):
-        # Fokus na první checkbox pro rychlou obsluhu čtečkou
         self.desktopCheck.setFocus()
+
+class SummaryPage(QWizardPage):
+    """Nová souhrnná stránka před instalací."""
+    def __init__(self, config):
+        super().__init__()
+        self.setTitle("Souhrn")
+        self.setAccessibleName("Souhrn instalace")
+        self.config = config
+        layout = QVBoxLayout()
+        intro = QLabel("Zkontrolujte nastavení před zahájením instalace:")
+        intro.setWordWrap(True)
+        intro.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        intro.setAccessibleName("Zkontrolujte nastavení před zahájením instalace")
+        layout.addWidget(intro)
+
+        self.appNameLabel = QLabel("")
+        self.appNameLabel.setWordWrap(True)
+        self.appNameLabel.setAccessibleName("")
+        layout.addWidget(self.appNameLabel)
+
+        self.versionLabel = QLabel("")
+        self.versionLabel.setWordWrap(True)
+        layout.addWidget(self.versionLabel)
+
+        self.installPathLabel = QLabel("")
+        self.installPathLabel.setWordWrap(True)
+        self.installPathLabel.setAccessibleName("")
+        layout.addWidget(self.installPathLabel)
+
+        self.desktopLabel = QLabel("")
+        self.desktopLabel.setWordWrap(True)
+        layout.addWidget(self.desktopLabel)
+
+        self.startmenuLabel = QLabel("")
+        self.startmenuLabel.setWordWrap(True)
+        layout.addWidget(self.startmenuLabel)
+
+        self.setLayout(layout)
+
+    def initializePage(self):
+        app_name = self.config.get("appName", "")
+        version = self.config.get("appVersion", "")
+        install_path = self.field("installPath")
+        desktop = "Ano" if self.field("createDesktopShortcut") else "Ne"
+        startmenu = "Ano" if self.field("createStartMenuShortcut") else "Ne"
+
+        self.appNameLabel.setText(f"Aplikace: {app_name}")
+        self.appNameLabel.setAccessibleName(f"Aplikace: {app_name}")
+        self.versionLabel.setText(f"Verze: {version}")
+        self.versionLabel.setAccessibleName(f"Verze: {version}")
+        self.installPathLabel.setText(f"Cílová složka: {install_path}")
+        self.installPathLabel.setAccessibleName(f"Cílová složka: {install_path}")
+        self.desktopLabel.setText(f"Zástupce na ploše: {desktop}")
+        self.desktopLabel.setAccessibleName(f"Zástupce na ploše: {desktop}")
+        self.startmenuLabel.setText(f"Zástupce v nabídce Start: {startmenu}")
+        self.startmenuLabel.setAccessibleName(f"Zástupce v nabídce Start: {startmenu}")
+        self.appNameLabel.setFocus()
 
 class ProgressPage(QWizardPage):
     def __init__(self, config, source_dir):
@@ -306,36 +578,65 @@ class ProgressPage(QWizardPage):
         self.statusLabel = QLabel("Připraveno...")
         layout.addWidget(self.statusLabel)
 
+        self.liveLabel = QLabel("")
+        self.liveLabel.setAccessibleName("")
+        # Live region pro čtečku – throttling 1.2s
+        self.liveLabel.setAccessibleDescription("Průběh instalace")
+        layout.addWidget(self.liveLabel)
+
         self.progressBar = QProgressBar()
         self.progressBar.setAccessibleName("Průběh v procentech")
         layout.addWidget(self.progressBar)
         self.setLayout(layout)
+        self._last_announce = 0
+        self._last_status_text = ""
 
     def initializePage(self):
         self.label.setFocus()
         self.wizard().button(QWizard.WizardButton.BackButton).setEnabled(False)
         dest = self.field("installPath")
-        # Aktualizuj config podle volby uživatele na ShortcutSelectionPage
         try:
             self.config['createDesktopShortcut'] = bool(self.field("createDesktopShortcut"))
             self.config['createStartMenuShortcut'] = bool(self.field("createStartMenuShortcut"))
         except Exception:
             pass
-        self.thread = InstallationThread(self.source_dir, dest, self.config)
-        self.thread.progress.connect(self.progressBar.setValue)
-        self.thread.status.connect(self.update_status)
-        self.thread.finished_signal.connect(self.on_finished)
-        self.thread.start()
+        self.wizard()._install_thread = InstallationThread(self.source_dir, dest, self.config)
+        self.wizard()._install_thread.progress.connect(self.progressBar.setValue)
+        self.wizard()._install_thread.status.connect(self.on_status)
+        self.wizard()._install_thread.announce.connect(self.on_announce)
+        self.wizard()._install_thread.finished_signal.connect(self.on_finished)
+        self.wizard()._install_thread.start()
 
-    def update_status(self, text):
+    def on_status(self, text):
         self.statusLabel.setText(text)
         self.statusLabel.setAccessibleName(f"Stav: {text}")
 
+    def on_announce(self, text):
+        # throttling 1.2s
+        now = time.monotonic()
+        if now - self._last_announce < 1.2 and text == self._last_status_text:
+            return
+        if now - self._last_announce < 1.2:
+            # stále aktualizuj ale throttluj
+            pass
+        # Update liveLabel a vyvolej QAccessible.Alert
+        self.liveLabel.setText(text)
+        self.liveLabel.setAccessibleName(text)
+        self.liveLabel.setAccessibleDescription(text)
+        try:
+            QAccessible.updateAccessibility(self.liveLabel, 0, QAccessible.Event.Alert)
+        except Exception:
+            pass
+        try:
+            QAccessible.updateAccessibility(self.liveLabel, 0, QAccessible.Event.ValueChanged)
+        except Exception:
+            pass
+        self._last_announce = now
+        self._last_status_text = text
+
     def on_finished(self, success, message):
         if success:
-            # Ulož zprávu (včetně varování) pro FinishPage, aby ji zobrazila
             self.wizard().installResultMessage = message
-            # Detekce varování – pokud zpráva obsahuje "Varování", označ
             if "Varování" in message:
                 self.wizard().shortcutErrors = message
             self.wizard().next()
@@ -364,15 +665,12 @@ class FinishPage(QWizardPage):
         self.setLayout(layout)
 
     def initializePage(self):
-        # Zobraz varování pokud instalace hlásila chybu zástupců
         msg = getattr(self.wizard(), 'installResultMessage', '')
         if msg and "Varování" in msg:
-            # Zobraz jen část s varováním
             warning_text = msg[msg.find("Varování"):]
             self.warningLabel.setText(warning_text)
             self.warningLabel.setAccessibleName(warning_text)
             self.warningLabel.show()
-            # Pro čtečku – přesuň fokus na varování
             self.warningLabel.setFocus()
         else:
             self.warningLabel.hide()
@@ -382,6 +680,7 @@ class AccessibleWizard(QWizard):
     def __init__(self, config, source_dir):
         super().__init__()
         self.config = config
+        self._install_thread = None
         self.setWindowTitle(f"Instalace - {config['appName']}")
         self.setWizardStyle(QWizard.WizardStyle.ModernStyle)
 
@@ -393,26 +692,53 @@ class AccessibleWizard(QWizard):
         self.addPage(IntroPage(config))
         self.addPage(DirectoryPage(config))
         self.addPage(ShortcutSelectionPage(config))
+        self.addPage(SummaryPage(config))
         self.addPage(ProgressPage(config, source_dir))
         self.addPage(FinishPage(config))
 
     def reject(self):
-        msg = f"Chcete skutečně přerušit instalaci programu {self.config['appName']}?\n\n" \
-              f"Stiskněte Ano pro ukončení nebo Ne pro pokračování."
-        reply = QMessageBox.question(self, "Ukončení", msg, 
-                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, 
+        if self.currentId() == 4 and self._install_thread is not None and self._install_thread.isRunning():
+            msg = f"Instalace probíhá. Chcete ji přerušit?\n\nStiskněte Ano pro přerušení nebo Ne pro pokračování."
+            reply = QMessageBox.question(self, "Přerušit instalaci", msg,
+                                         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                                         QMessageBox.StandardButton.No)
+            if reply == QMessageBox.StandardButton.Yes:
+                try:
+                    self._install_thread.requestInterruption()
+                    self._install_thread.wait(3000)
+                except Exception:
+                    pass
+                super().reject()
+            return
+        msg = f"Chcete skutečně přerušit instalaci programu {self.config['appName']}?\n\nStiskněte Ano pro ukončení nebo Ne pro pokračování."
+        reply = QMessageBox.question(self, "Ukončení", msg,
+                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                                      QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
+            if self._install_thread is not None and self._install_thread.isRunning():
+                try:
+                    self._install_thread.requestInterruption()
+                    self._install_thread.wait(2000)
+                except Exception:
+                    pass
             super().reject()
 
 def main():
     base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
     config_path = os.path.join(base_path, "config.json")
     if not os.path.exists(config_path):
-        config = {"appName": "Aplikace", "appVersion": "1.0", "appAuthor": "Autor", "installDir": 0}
+        config = {"appName": "Aplikace", "appVersion": "1.0", "appAuthor": "Autor", "installDir": 0, "exePath": ""}
     else:
         with open(config_path, "r", encoding="utf-8") as f:
             config = json.load(f)
+
+    # fallback exeName z exePath
+    if not config.get("exeName"):
+        exe_path = config.get("exePath", "")
+        if exe_path:
+            config["exeName"] = os.path.basename(exe_path)
+        else:
+            config["exeName"] = (config.get("safeName") or config.get("appName") or "app") + ".exe"
 
     app = QApplication(sys.argv)
     source_dir = os.path.join(base_path, "payload")
