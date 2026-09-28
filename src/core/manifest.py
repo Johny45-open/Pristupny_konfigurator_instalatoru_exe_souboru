@@ -115,6 +115,74 @@ def build_manifest_from_payload(
     )
 
 
+def _parse_version_tuple(version: str) -> tuple[int, int, int]:
+    """Parsuje '1.2.3', '1.2', '1.2.3-xyz' na (major, minor, patch). Nečíselné → 0."""
+    import re as _re
+
+    s = str(version or "").strip()
+    m = _re.match(r"^(\d+)(?:\.(\d+))?(?:\.(\d+))?", s)
+    if not m:
+        return (0, 0, 0)
+    try:
+        maj = int(m.group(1) or 0)
+        min_ = int(m.group(2) or 0)
+        pat = int(m.group(3) or 0)
+    except Exception:
+        return (0, 0, 0)
+    return (maj, min_, pat)
+
+
+def compare_versions(old: str, new: str) -> int:
+    """Porovná dvě verze. Vrátí -1 (new < old), 0 (shodné), 1 (new > old)."""
+    o = _parse_version_tuple(old)
+    n = _parse_version_tuple(new)
+    if n < o:
+        return -1
+    if n > o:
+        return 1
+    return 0
+
+
+def diff_payload(
+    old_files: list[str] | None,
+    new_files: list[str] | None,
+    old_dirs: list[str] | None = None,
+    new_dirs: list[str] | None = None,
+) -> dict[str, list[str]]:
+    """Vrátí diff payloadu: added / removed / kept (+ dirs_added / dirs_removed).
+
+    Porovnání je case-insensitive na Windows (normalizace lower + sep).
+    """
+    def _norm(items: list[str] | None) -> set[str]:
+        out: set[str] = set()
+        for it in items or []:
+            out.add(os.path.normpath(str(it)).lower())
+        return out
+
+    def _original_map(items: list[str] | None) -> dict[str, str]:
+        m: dict[str, str] = {}
+        for it in items or []:
+            m.setdefault(os.path.normpath(str(it)).lower(), str(it))
+        return m
+
+    old_n = _norm(old_files)
+    new_n = _norm(new_files)
+    new_map = _original_map(new_files)
+    old_map = _original_map(old_files)
+    added = sorted(new_map[k] for k in (new_n - old_n))
+    removed = sorted(old_map[k] for k in (old_n - new_n))
+    kept = sorted(new_map[k] for k in (new_n & old_n))
+    result: dict[str, list[str]] = {"added": added, "removed": removed, "kept": kept}
+    if old_dirs is not None or new_dirs is not None:
+        old_dn = _norm(old_dirs)
+        new_dn = _norm(new_dirs)
+        new_dmap = _original_map(new_dirs)
+        old_dmap = _original_map(old_dirs)
+        result["dirs_added"] = sorted(new_dmap[k] for k in (new_dn - old_dn))
+        result["dirs_removed"] = sorted(old_dmap[k] for k in (old_dn - new_dn))
+    return result
+
+
 def write_manifest(manifest: InstallationManifest, dest_dir: str) -> str:
     """Zapíše manifest do dest_dir/install_manifest.json, vrátí cestu."""
     os.makedirs(dest_dir, exist_ok=True)

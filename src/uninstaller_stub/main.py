@@ -7,7 +7,10 @@ import time
 from PyQt6.QtWidgets import (QApplication, QWizard, QWizardPage, QVBoxLayout,
                              QLabel, QProgressBar, QMessageBox)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
-from PyQt6.QtGui import QAccessible
+try:
+    from PyQt6.QtGui import QAccessible
+except Exception:
+    QAccessible = None  # type: ignore
 
 MANIFEST_FILENAME = "install_manifest.json"
 CONFIG_FILENAME = "install_config.json"

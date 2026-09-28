@@ -63,15 +63,8 @@ def _run_pyinstaller(cmd, cwd, timeout=600):
         raise Exception(f"PyInstaller selhal (code {proc.returncode}): {err[:4000]}")
     return stdout, stderr
 
-def build_installer(data, output_exe_path, progress_callback=None):
-    def report(text, percent=None):
-        if progress_callback:
-            try:
-                progress_callback(text, percent)
-            except Exception:
-                pass
-    if shutil.which("pyinstaller") is None:
-        raise Exception("PyInstaller není nainstalován nebo není v PATH. Nainstalujte ho příkazem: pip install pyinstaller")
+def _prepare_runtime(data):
+    """Validuje vstup a vrátí (safe_name, runtime_config). Sdílené pro installer i updater."""
     if not data.get("appName") or not str(data["appName"]).strip():
         raise ValueError("Název aplikace je povinný")
     if not data.get("exePath") or not os.path.exists(str(data["exePath"])):
@@ -84,7 +77,7 @@ def build_installer(data, output_exe_path, progress_callback=None):
             safe_name = slugify(str(data["appName"]))
     else:
         safe_name = slugify(str(data["appName"]))
-    data['safeName'] = safe_name
+    data["safeName"] = safe_name
     if sanitize_runtime_config is not None:
         try:
             runtime_config = sanitize_runtime_config(data)
@@ -92,6 +85,69 @@ def build_installer(data, output_exe_path, progress_callback=None):
             raise ValueError(f"Neplatná konfigurace: {e}")
     else:
         runtime_config = {"appName": str(data.get("appName", "")).strip(), "appVersion": str(data.get("appVersion", "")).strip() or "1.0.0", "appAuthor": str(data.get("appAuthor", "")).strip(), "safeName": safe_name, "exeName": os.path.basename(str(data.get("exePath", ""))), "installDir": int(data.get("installDir", 0)) if str(data.get("installDir", 0)).isdigit() else 0, "createDesktopShortcut": bool(data.get("createDesktopShortcut", True)), "createStartMenuShortcut": bool(data.get("createStartMenuShortcut", True))}
+    return safe_name, runtime_config
+
+
+def _copy_app_payload(data, payload_dir):
+    """Zkopíruje EXE + vedlejší soubory do payload_dir (bez uninstall.exe)."""
+    EXCLUDED_EXTS = {".pdb", ".log", ".tmp", ".ilk"}
+    os.makedirs(payload_dir, exist_ok=True)
+    shutil.copy2(data["exePath"], payload_dir)
+    if data.get("dirPath") and os.path.exists(data["dirPath"]):
+        dir_path = os.path.abspath(data["dirPath"])
+        for item in os.listdir(dir_path):
+            if item == os.path.basename(data["exePath"]):
+                continue
+            if os.path.splitext(item)[1].lower() in EXCLUDED_EXTS:
+                continue
+            s = os.path.join(dir_path, item)
+            d = os.path.join(payload_dir, item)
+            try:
+                if os.path.isdir(s):
+                    shutil.copytree(s, d, dirs_exist_ok=True, ignore=shutil.ignore_patterns("*.pdb", "*.log", "*.tmp", "*.ilk", "__pycache__"))
+                else:
+                    shutil.copy2(s, d)
+            except Exception:
+                pass
+    else:
+        exe_dir = os.path.dirname(os.path.abspath(data["exePath"]))
+        for extra in ["_internal", "lib", "tcl", "tk"]:
+            extra_path = os.path.join(exe_dir, extra)
+            if os.path.exists(extra_path) and os.path.isdir(extra_path):
+                try:
+                    shutil.copytree(extra_path, os.path.join(payload_dir, extra), dirs_exist_ok=True, ignore=shutil.ignore_patterns("*.pdb", "*.log", "*.tmp", "__pycache__"))
+                except Exception:
+                    pass
+
+
+def _move_dist(tmpdir, dist_name, output_exe_path, progress_callback=None):
+    dist_exe = os.path.join(tmpdir, "dist", dist_name)
+    if os.path.exists(dist_exe):
+        out_dir = os.path.dirname(os.path.abspath(output_exe_path))
+        if out_dir and not os.path.exists(out_dir):
+            os.makedirs(out_dir, exist_ok=True)
+        if os.path.exists(output_exe_path):
+            os.remove(output_exe_path)
+        shutil.move(dist_exe, output_exe_path)
+        if progress_callback:
+            try:
+                progress_callback("Hotovo", 100)
+            except Exception:
+                pass
+        return True
+    return False
+
+
+def build_installer(data, output_exe_path, progress_callback=None):
+    def report(text, percent=None):
+        if progress_callback:
+            try:
+                progress_callback(text, percent)
+            except Exception:
+                pass
+    if shutil.which("pyinstaller") is None:
+        raise Exception("PyInstaller není nainstalován nebo není v PATH. Nainstalujte ho příkazem: pip install pyinstaller")
+    safe_name, runtime_config = _prepare_runtime(data)
     with tempfile.TemporaryDirectory() as tmpdir:
         report("Krok 1/3: Sestavuji odinstalátor...", 10)
         uninst_tmp = os.path.join(tmpdir, "uninst_build")
@@ -112,50 +168,50 @@ def build_installer(data, output_exe_path, progress_callback=None):
         config_path = os.path.join(tmpdir, "config.json")
         with open(config_path, "w", encoding="utf-8") as f:
             json.dump(runtime_config, f, ensure_ascii=False, indent=2)
-        EXCLUDED_EXTS = {".pdb", ".log", ".tmp", ".ilk"}
         payload_dir = os.path.join(tmpdir, "payload")
         if os.path.exists(payload_dir):
             shutil.rmtree(payload_dir)
         os.makedirs(payload_dir)
         shutil.copy2(uninstall_exe_path, payload_dir)
-        shutil.copy2(data['exePath'], payload_dir)
-        if data.get('dirPath') and os.path.exists(data['dirPath']):
-            dir_path = os.path.abspath(data['dirPath'])
-            for item in os.listdir(dir_path):
-                if item == os.path.basename(data['exePath']):
-                    continue
-                if os.path.splitext(item)[1].lower() in EXCLUDED_EXTS:
-                    continue
-                s = os.path.join(dir_path, item)
-                d = os.path.join(payload_dir, item)
-                try:
-                    if os.path.isdir(s):
-                        shutil.copytree(s, d, dirs_exist_ok=True, ignore=shutil.ignore_patterns("*.pdb", "*.log", "*.tmp", "*.ilk", "__pycache__"))
-                    else:
-                        shutil.copy2(s, d)
-                except Exception:
-                    pass
-        else:
-            exe_dir = os.path.dirname(os.path.abspath(data['exePath']))
-            for extra in ["_internal", "lib", "tcl", "tk"]:
-                extra_path = os.path.join(exe_dir, extra)
-                if os.path.exists(extra_path) and os.path.isdir(extra_path):
-                    try:
-                        shutil.copytree(extra_path, os.path.join(payload_dir, extra), dirs_exist_ok=True, ignore=shutil.ignore_patterns("*.pdb", "*.log", "*.tmp", "__pycache__"))
-                    except Exception:
-                        pass
+        _copy_app_payload(data, payload_dir)
         report("Krok 3/3: Sestavuji finální instalátor (může trvat několik minut)...", 70)
-        setup_cmd = ["pyinstaller", "--onefile", "--windowed", "--uac-admin", f"--name={safe_name}_Setup", f"--add-data=config.json;.", f"--add-data=payload;payload", "--clean", "main.py"]
+        setup_cmd = ["pyinstaller", "--onefile", "--windowed", "--uac-admin", f"--name={safe_name}_Setup", "--add-data=config.json;.", "--add-data=payload;payload", "--clean", "main.py"]
         _run_pyinstaller(setup_cmd, cwd=tmpdir, timeout=600)
         report("Dokončuji...", 95)
-        dist_exe = os.path.join(tmpdir, "dist", f"{safe_name}_Setup.exe")
-        if os.path.exists(dist_exe):
-            out_dir = os.path.dirname(os.path.abspath(output_exe_path))
-            if out_dir and not os.path.exists(out_dir):
-                os.makedirs(out_dir, exist_ok=True)
-            if os.path.exists(output_exe_path):
-                os.remove(output_exe_path)
-            shutil.move(dist_exe, output_exe_path)
-            report("Hotovo", 100)
-            return True
-        return False
+        return _move_dist(tmpdir, f"{safe_name}_Setup.exe", output_exe_path, progress_callback)
+
+
+def build_updater(data, output_exe_path, progress_callback=None):
+    """Sestaví offline aktualizační EXE ({safeName}_Update.exe) z updater_stub.
+
+    Payload obsahuje jen soubory aplikace (bez uninstall.exe) + config.json s novou verzí.
+    Aktualizace na cílovém PC vyžaduje existující manifest z instalátoru.
+    """
+    def report(text, percent=None):
+        if progress_callback:
+            try:
+                progress_callback(text, percent)
+            except Exception:
+                pass
+    if shutil.which("pyinstaller") is None:
+        raise Exception("PyInstaller není nainstalován nebo není v PATH. Nainstalujte ho příkazem: pip install pyinstaller")
+    safe_name, runtime_config = _prepare_runtime(data)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        report("Krok 1/2: Připravuji soubory aktualizace...", 20)
+        stub_dir = get_resource_path("updater_stub")
+        if not os.path.isdir(stub_dir):
+            raise Exception(f"Nenalezena složka aktualizátoru: {stub_dir}")
+        shutil.copytree(stub_dir, tmpdir, dirs_exist_ok=True)
+        config_path = os.path.join(tmpdir, "config.json")
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(runtime_config, f, ensure_ascii=False, indent=2)
+        payload_dir = os.path.join(tmpdir, "payload")
+        if os.path.exists(payload_dir):
+            shutil.rmtree(payload_dir)
+        os.makedirs(payload_dir)
+        _copy_app_payload(data, payload_dir)
+        report("Krok 2/2: Sestavuji aktualizační program (může trvat několik minut)...", 60)
+        update_cmd = ["pyinstaller", "--onefile", "--windowed", "--uac-admin", f"--name={safe_name}_Update", "--add-data=config.json;.", "--add-data=payload;payload", "--clean", "main.py"]
+        _run_pyinstaller(update_cmd, cwd=tmpdir, timeout=600)
+        report("Dokončuji...", 95)
+        return _move_dist(tmpdir, f"{safe_name}_Update.exe", output_exe_path, progress_callback)

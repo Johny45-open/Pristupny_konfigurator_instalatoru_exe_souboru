@@ -73,6 +73,7 @@ def build():
     datas = [
         (os.path.join(project_root, "src", "uninstaller_stub") + ";uninstaller_stub"),
         (os.path.join(project_root, "src", "installer_stub") + ";installer_stub"),
+        (os.path.join(project_root, "src", "updater_stub") + ";updater_stub"),
         (os.path.join(project_root, "templates") + ";templates"),
         (os.path.join(project_root, "VERSION") + ";."),
     ]

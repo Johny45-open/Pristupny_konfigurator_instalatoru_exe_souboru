@@ -8,9 +8,12 @@ from enum import Enum
 from datetime import datetime, timezone
 from PyQt6.QtWidgets import (QApplication, QWizard, QWizardPage, QVBoxLayout,
                              QLabel, QLineEdit, QPushButton, QHBoxLayout,
-                             QProgressBar, QMessageBox, QCheckBox)
+                             QProgressBar, QMessageBox, QCheckBox, QTextBrowser)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
-from PyQt6.QtGui import QAccessible
+try:
+    from PyQt6.QtGui import QAccessible
+except Exception:
+    QAccessible = None  # type: ignore
 
 MANIFEST_FILENAME = "install_manifest.json"
 CONFIG_FILENAME = "install_config.json"
@@ -504,61 +507,81 @@ class ShortcutSelectionPage(QWizardPage):
         self.desktopCheck.setFocus()
 
 class SummaryPage(QWizardPage):
-    """Nová souhrnná stránka před instalací."""
+    """Přístupná souhrnná stránka před instalací (QTextBrowser — šipky + virtuální kurzor)."""
     def __init__(self, config):
         super().__init__()
         self.setTitle("Souhrn")
         self.setAccessibleName("Souhrn instalace")
+        self.setAccessibleDescription("Přehled instalace před spuštěním. Čtěte šipkami v textovém poli.")
         self.config = config
         layout = QVBoxLayout()
-        intro = QLabel("Zkontrolujte nastavení před zahájením instalace:")
+        intro = QLabel("Zkontrolujte nastavení před zahájením instalace. "
+                       "Text přečtete šipkami, Tab vás posune na tlačítka.")
         intro.setWordWrap(True)
-        intro.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        intro.setAccessibleName("Zkontrolujte nastavení před zahájením instalace")
+        intro.setAccessibleName(intro.text())
         layout.addWidget(intro)
 
-        self.appNameLabel = QLabel("")
-        self.appNameLabel.setWordWrap(True)
-        self.appNameLabel.setAccessibleName("")
-        layout.addWidget(self.appNameLabel)
+        self.summaryView = QTextBrowser()
+        self.summaryView.setReadOnly(True)
+        self.summaryView.setOpenExternalLinks(False)
+        self.summaryView.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.summaryView.setAccessibleName("Souhrn instalace")
+        self.summaryView.setAccessibleDescription(
+            "Textové shrnutí instalace. Pohyb šipkami nahoru a dolů, výběr klávesnicí.")
+        self.summaryView.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+            | Qt.TextInteractionFlag.TextSelectableByKeyboard)
+        layout.addWidget(self.summaryView)
 
-        self.versionLabel = QLabel("")
-        self.versionLabel.setWordWrap(True)
-        layout.addWidget(self.versionLabel)
-
-        self.installPathLabel = QLabel("")
-        self.installPathLabel.setWordWrap(True)
-        self.installPathLabel.setAccessibleName("")
-        layout.addWidget(self.installPathLabel)
-
-        self.desktopLabel = QLabel("")
-        self.desktopLabel.setWordWrap(True)
-        layout.addWidget(self.desktopLabel)
-
-        self.startmenuLabel = QLabel("")
-        self.startmenuLabel.setWordWrap(True)
-        layout.addWidget(self.startmenuLabel)
+        copy_btn = QPushButton("Kopírovat souhrn do schránky")
+        copy_btn.setAccessibleName("Kopírovat souhrn do schránky")
+        copy_btn.setAccessibleDescription("Zkopíruje text souhrnu do schránky")
+        copy_btn.clicked.connect(self.copy_summary)
+        layout.addWidget(copy_btn)
 
         self.setLayout(layout)
 
-    def initializePage(self):
+    def summary_text(self) -> str:
         app_name = self.config.get("appName", "")
         version = self.config.get("appVersion", "")
-        install_path = self.field("installPath")
-        desktop = "Ano" if self.field("createDesktopShortcut") else "Ne"
-        startmenu = "Ano" if self.field("createStartMenuShortcut") else "Ne"
+        author = self.config.get("appAuthor", "") or "—"
+        try:
+            install_path = self.field("installPath") or ""
+        except Exception:
+            install_path = ""
+        try:
+            desktop = "Ano" if self.field("createDesktopShortcut") else "Ne"
+        except Exception:
+            desktop = "—"
+        try:
+            startmenu = "Ano" if self.field("createStartMenuShortcut") else "Ne"
+        except Exception:
+            startmenu = "—"
+        return (
+            f"Aplikace: {app_name}\n"
+            f"Verze: {version}\n"
+            f"Autor: {author}\n"
+            f"Cílová složka: {install_path}\n"
+            f"Zástupce na ploše: {desktop}\n"
+            f"Zástupce v nabídce Start: {startmenu}"
+        )
 
-        self.appNameLabel.setText(f"Aplikace: {app_name}")
-        self.appNameLabel.setAccessibleName(f"Aplikace: {app_name}")
-        self.versionLabel.setText(f"Verze: {version}")
-        self.versionLabel.setAccessibleName(f"Verze: {version}")
-        self.installPathLabel.setText(f"Cílová složka: {install_path}")
-        self.installPathLabel.setAccessibleName(f"Cílová složka: {install_path}")
-        self.desktopLabel.setText(f"Zástupce na ploše: {desktop}")
-        self.desktopLabel.setAccessibleName(f"Zástupce na ploše: {desktop}")
-        self.startmenuLabel.setText(f"Zástupce v nabídce Start: {startmenu}")
-        self.startmenuLabel.setAccessibleName(f"Zástupce v nabídce Start: {startmenu}")
-        self.appNameLabel.setFocus()
+    def copy_summary(self):
+        try:
+            QApplication.clipboard().setText(self.summaryView.toPlainText())
+            self.summaryView.setAccessibleDescription("Souhrn zkopírován do schránky.")
+        except Exception:
+            pass
+
+    def initializePage(self):
+        text = self.summary_text()
+        self.summaryView.setPlainText(text)
+        self.summaryView.setAccessibleName(f"Souhrn instalace. {text}")
+        try:
+            self.summaryView.moveCursor(self.summaryView.textCursor().Start)
+        except Exception:
+            pass
+        self.summaryView.setFocus()
 
 class ProgressPage(QWizardPage):
     def __init__(self, config, source_dir):
