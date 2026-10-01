@@ -427,7 +427,8 @@ class DirectoryPage(QWizardPage):
         self.pathEdit.setText(default_path)
         self.pathEdit.setAccessibleName("Cesta k instalaci")
         layout.addWidget(self.pathEdit)
-        self.registerField("installPath*", self.pathEdit)
+        self.registerField("installPath", self.pathEdit)
+        self.pathEdit.textChanged.connect(self._on_path_changed)
 
         self.errorLabel = QLabel("")
         self.errorLabel.setWordWrap(True)
@@ -437,6 +438,12 @@ class DirectoryPage(QWizardPage):
         layout.addWidget(self.errorLabel)
 
         self.setLayout(layout)
+
+    def isComplete(self):
+        return bool(self.pathEdit.text().strip())
+
+    def _on_path_changed(self, _text):
+        self.completeChanged.emit()
 
     def validatePage(self):
         path = self.pathEdit.text().strip()

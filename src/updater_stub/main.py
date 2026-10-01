@@ -454,7 +454,7 @@ class DirectoryPage(QWizardPage):
         row.addWidget(browse)
         layout.addWidget(QLabel("Cesta k instalaci:"))
         layout.addLayout(row)
-        self.registerField("installPath*", self.pathEdit)
+        self.registerField("installPath", self.pathEdit)
 
         if config.get("installDir", 0) == 0:
             pf = os.environ.get("ProgramW6432") or os.environ.get("ProgramFiles", "")
@@ -478,6 +478,13 @@ class DirectoryPage(QWizardPage):
         layout.addWidget(self.errorLabel)
         self.setLayout(layout)
         self.pathEdit.textChanged.connect(self.refresh_info)
+        self.pathEdit.textChanged.connect(self._on_path_changed)
+
+    def isComplete(self):
+        return bool(self.pathEdit.text().strip())
+
+    def _on_path_changed(self, _text):
+        self.completeChanged.emit()
 
     def browse(self):
         directory = QFileDialog.getExistingDirectory(self, "Vybrat složku stávající instalace")

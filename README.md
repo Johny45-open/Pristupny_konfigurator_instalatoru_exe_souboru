@@ -30,6 +30,25 @@ Tento nástroj slouží k vytváření plně přístupných instalátorů pro Wi
    python src/main.py
    ```
 
+## Sestavení EXE jedním dvojklikem
+
+Ve Windows stačí dvakrát kliknout na `sestavit-konfigurator.bat`:
+
+* Zkontroluje Python a PyInstaller (PyInstaller při chybění **automaticky doinstaluje**).
+* Přečte verzi ze souboru `VERSION`, sestaví přes `build.py` a výsledek **přepíše** na `dist\Konfigurator-vX.Y.Z.exe`.
+* Verze je **oboje**: v názvu souboru i uvnitř EXE (pravý klik → Vlastnosti → Podrobnosti).
+
+Volitelný parametr určuje bump verze (výchozí `no` – bez bumpu, použije přesně to, co je ve VERSION):
+
+```
+sestavit-konfigurator.bat        ... bez bumpu, použije přesně to, co je ve VERSION
+sestavit-konfigurator.bat patch  ... 2.3.0 → 2.3.1
+sestavit-konfigurator.bat minor  ... 2.3.0 → 2.4.0
+sestavit-konfigurator.bat major  ... 2.3.0 → 3.0.0
+```
+
+Ručně z příkazové řádky jde totéž přes `python build.py --bump patch|minor|major|no` (výchozí `no`).
+
 ## Jak používat
 
 1. **Informace o aplikaci:** Zadejte název (povinné), autora a verzi.

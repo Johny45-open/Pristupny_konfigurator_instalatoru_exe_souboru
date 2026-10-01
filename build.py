@@ -40,11 +40,67 @@ def bump_version(version, bump_type):
     return f"{maj}.{min_}.{pat}"
 
 
+def generate_version_info(version, output_path):
+    """Vygeneruje version_info.txt (VSVersionInfo) pro PyInstaller z verze.
+
+    Zajisti, aby mel vysledny EXE verzi i ve Vlastnostech souboru
+    (Pravy klik -> Vlastnosti -> Podrobnosti). Pri neplatnem formatu
+    pouzije 0.0.0. V resourcech se umyslne nepouziva diakritika,
+    aby nedelala problemy se kodovanim na ruznych Windows.
+    """
+    m = re.match(r"^(\d+)\.(\d+)\.(\d+)", version.strip())
+    if m:
+        maj, min_, pat = map(int, m.groups())
+    else:
+        print(f"Varování: Neplatný formát verze '{version}' pro version_info, používám 0.0.0.")
+        maj, min_, pat = 0, 0, 0
+    clean_version = f"{maj}.{min_}.{pat}"
+    content = f"""# UTF-8
+# Generovano automaticky z VERSION ({version}) - needitovat rucne.
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers=({maj}, {min_}, {pat}, 0),
+    prodvers=({maj}, {min_}, {pat}, 0),
+    mask=0x3f,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0)
+  ),
+  kids=[
+    StringFileInfo(
+      [
+      StringTable(
+        u'040904B0',
+        [StringStruct(u'CompanyName', u'Johny45-open'),
+        StringStruct(u'FileDescription', u'Pristupny konfigurator instalatoru EXE souboru'),
+        StringStruct(u'FileVersion', u'{clean_version}'),
+        StringStruct(u'InternalName', u'Konfigurator'),
+        StringStruct(u'LegalCopyright', u'MIT'),
+        StringStruct(u'OriginalFilename', u'Konfigurator.exe'),
+        StringStruct(u'ProductName', u'Pristupny konfigurator instalatoru'),
+        StringStruct(u'ProductVersion', u'{clean_version}')])
+      ]),
+    VarFileInfo([VarStruct(u'Translation', [1033, 1200])])
+  ]
+)
+"""
+    try:
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(content)
+        print(f"version_info vygenerován: {output_path} (verze {clean_version})")
+        return output_path
+    except Exception as e:
+        print(f"Varování: Nepodařilo se zapsat version_info: {e}")
+        return None
+
+
 def build():
     parser = argparse.ArgumentParser(description="Sestavení Konfigurátoru")
     parser.add_argument("--no-bump", action="store_true", help="Neinkrementovat verzi v VERSION (respektuje ruční editaci)")
-    parser.add_argument("--bump", choices=["patch", "minor", "major", "no"], default="patch",
-                        help="Typ bumpu verze (default: patch). 'no' = stejné jako --no-bump")
+    parser.add_argument("--bump", choices=["patch", "minor", "major", "no"], default="no",
+                        help="Typ bumpu verze (default: no). 'no' = stejné jako --no-bump")
     args = parser.parse_args()
 
     # Zpracování verze
@@ -70,6 +126,11 @@ def build():
     # Pozor: stuby jsou v src/, templates a VERSION v kořeni
     # Použijeme absolutní cesty podle umístění build.py, aby fungovalo odkudkoli je spuštěn
     project_root = os.path.dirname(os.path.abspath(__file__))
+
+    # Verze do metadat EXE (Vlastnosti souboru -> Podrobnosti)
+    version_info_path = os.path.join(project_root, "version_info.txt")
+    generated = generate_version_info(version, version_info_path)
+
     datas = [
         (os.path.join(project_root, "src", "uninstaller_stub") + ";uninstaller_stub"),
         (os.path.join(project_root, "src", "installer_stub") + ";installer_stub"),
@@ -93,6 +154,10 @@ def build():
     for data in datas:
         cmd.extend(["--add-data", data])
 
+    # Verze do metadat EXE (Vlastnosti -> Podrobnosti)
+    if generated:
+        cmd.extend(["--version-file", version_info_path])
+
     # Hlavní skript (absolutní cesta)
     cmd.append(os.path.join(project_root, "src", "main.py"))
 
@@ -101,6 +166,7 @@ def build():
         subprocess.run(cmd, check=True, cwd=project_root)
         print("Sestavení proběhlo úspěšně.")
         print(f"Výstup: {os.path.join(project_root, 'dist', 'Konfigurator.exe')}")
+        print(f"FINAL_VERSION={version}")
     except subprocess.CalledProcessError as e:
         print(f"Sestavení selhalo: {e}")
         sys.exit(1)

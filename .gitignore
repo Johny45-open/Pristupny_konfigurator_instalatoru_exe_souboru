@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+
+# PyInstaller
+dist/
+build/
+*.spec
+version_info.txt
+
+# Instalatory / build artefakty - nepatri do Gitu, patri do GitHub Releases
+*.exe
+*_Setup.exe
+*Setup*.exe
+
+# Prostredi
+.venv/
+venv/
